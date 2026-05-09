@@ -11,6 +11,7 @@ import {
   sendPaymentReceivedToLandlord,
   sendBookingCancelledToStudent,
 } from "@/lib/email";
+import { enqueueEmail } from "@/lib/tasks";
 import { notifyUser } from "@/lib/notifications";
 
 export async function GET(request: Request) {
@@ -205,31 +206,17 @@ export async function GET(request: Request) {
       ).catch(console.error);
     }
 
-    // Send confirmation emails (fire-and-forget)
+    // Queue confirmation emails in background
     const formattedAmount = Number(txResult.amountPaid).toLocaleString("en-NG");
     const moveInStr = booking.moveInDate ? new Date(booking.moveInDate).toLocaleDateString("en-NG", { year: "numeric", month: "long", day: "numeric" }) : undefined;
 
-    sendPaymentConfirmedToStudent({
-      studentEmail: booking.student.email,
-      studentName: booking.student.name,
-      propertyTitle: booking.property.title,
-      propertyLocation: booking.property.location.name,
-      landlordName: booking.property.landlord.name,
-      landlordPhone: booking.property.landlord.phoneNumber ?? "",
-      amount: formattedAmount,
-      paystackRef: reference,
-      moveInDate: moveInStr,
-      bookingId,
-    }).catch(console.error);
+    enqueueEmail(booking.student.email, "Payment Confirmed",
+      `Hi <strong>${booking.student.name}</strong>,<br/><br/>Your payment of ₦${formattedAmount} for <strong>${booking.property.title}</strong> in ${booking.property.location.name} has been confirmed. Landlord: ${booking.property.landlord.name}. Move-in: ${moveInStr || "TBD"}`
+    ).catch(console.error);
 
-    sendPaymentReceivedToLandlord({
-      landlordEmail: booking.property.landlord.email,
-      landlordName: booking.property.landlord.name,
-      studentName: booking.student.name,
-      propertyTitle: booking.property.title,
-      amount: formattedAmount,
-      paystackRef: reference,
-    }).catch(console.error);
+    enqueueEmail(booking.property.landlord.email, "Payment Received",
+      `Hi <strong>${booking.property.landlord.name}</strong>,<br/><br/><strong>${booking.student.name}</strong> completed payment of ₦${formattedAmount} for <strong>${booking.property.title}</strong>.`
+    ).catch(console.error);
 
     await Promise.all([
       notifyUser({

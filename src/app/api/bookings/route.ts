@@ -15,6 +15,7 @@ import {
   sendBookingCancelledToStudent,
   sendBookingCancelledToLandlord,
 } from '@/lib/email';
+import { enqueueEmail } from '@/lib/tasks';
 import { notifyRole, notifyUser } from '@/lib/notifications';
 
 const bookingWithRelationsInclude = {
@@ -155,24 +156,14 @@ export async function POST(request: Request) {
       },
     });
 
-    // Confirm to student immediately (fire-and-forget)
-    sendBookingConfirmedToStudent({
-      studentEmail:     booking.student.email,
-      studentName:      booking.student.name,
-      propertyTitle:    booking.property.title,
-      propertyLocation: booking.property.location.name,
-      landlordName:     booking.property.landlord.name,
-    }).catch((err) => console.error('[email] booking confirmed notification failed:', err));
+    // Queue confirmation emails to student and landlord in background
+    enqueueEmail(booking.student.email, 'Booking Confirmed',
+      `Hi <strong>${booking.student.name}</strong>,<br/><br/>Your booking for <strong>${booking.property.title}</strong> in ${booking.property.location.name} is confirmed. Please proceed to payment.`
+    ).catch((err) => console.error('[TASK] booking confirmed email failed:', err));
 
-    // Also notify landlord that a student is ready to pay (fire-and-forget)
-    sendBookingRequestToLandlord({
-      landlordEmail:    booking.property.landlord.email,
-      landlordName:     booking.property.landlord.name,
-      studentName:      booking.student.name,
-      propertyTitle:    booking.property.title,
-      propertyLocation: booking.property.location.name,
-      bookingId:        booking.id,
-    }).catch((err) => console.error('[email] landlord booking notification failed:', err));
+    enqueueEmail(booking.property.landlord.email, 'New Booking Request',
+      `Hi <strong>${booking.property.landlord.name}</strong>,<br/><br/><strong>${booking.student.name}</strong> wants to book <strong>${booking.property.title}</strong> and is ready to pay. Review in your dashboard.`
+    ).catch((err) => console.error('[TASK] landlord booking notification failed:', err));
 
     await Promise.all([
       notifyUser({

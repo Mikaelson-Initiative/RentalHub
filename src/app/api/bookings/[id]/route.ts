@@ -8,10 +8,7 @@ import { getServerSession } from 'next-auth';
 import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import type { BookingStatus } from '@prisma/client';
-import {
-  sendBookingCancelledToStudent,
-  sendBookingConfirmedToStudent,
-} from '@/lib/email';
+import { enqueueEmail, wrapEmailHtml } from '@/lib/tasks';
 import { notifyUser } from '@/lib/notifications';
 
 interface RouteContext {
@@ -264,13 +261,22 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     }
 
     if (status === "CONFIRMED") {
-      sendBookingConfirmedToStudent({
-        studentEmail: updated.student.email,
-        studentName: updated.student.name,
-        propertyTitle: updated.property.title,
-        propertyLocation: updated.property.location.name,
-        landlordName: updated.property.landlord.name,
-      }).catch(console.error);
+      const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/student`;
+      const html = wrapEmailHtml("Booking Confirmed 🎉", `
+        <p>Hi <strong>${updated.student.name}</strong>,</p>
+        <p>Great news! Your booking request has been <strong style="color:#16a34a;">confirmed</strong> by the landlord.</p>
+        <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:14px;">
+          <tr><td style="padding:8px 0;color:#6b7280;width:140px;">Property</td><td style="padding:8px 0;font-weight:600;color:#192F59;">${updated.property.title}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Location</td><td style="padding:8px 0;">${updated.property.location.name}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Landlord</td><td style="padding:8px 0;">${updated.property.landlord.name}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Status</td><td style="padding:8px 0;"><span style="background:#dcfce7;color:#166534;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:600;">CONFIRMED</span></td></tr>
+        </table>
+        <p style="margin:28px 0;">
+          <a href="${dashboardUrl}" style="background:#E67E22;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold;display:inline-block;">View My Bookings</a>
+        </p>
+        <p style="color:#6b7280;font-size:13px;">Next step: the landlord will reach out to you directly to arrange payment and move-in details.</p>
+      `);
+      enqueueEmail(updated.student.email, `Booking confirmed — ${updated.property.title}`, html).catch(console.error);
 
       await notifyUser({
         userId: updated.student.id,
@@ -290,26 +296,41 @@ export async function PATCH(request: Request, { params }: RouteContext) {
               message: `Another student placed a higher winning bid for ${loser.property.title}.`,
               link: "/student?tab=bookings",
             });
-            await sendBookingCancelledToStudent({
-              studentEmail: loser.student.email,
-              studentName: loser.student.name,
-              propertyTitle: loser.property.title,
-              propertyLocation: loser.property.location.name,
-              cancelledBy: "landlord",
-            });
+            const cancelledHtml = wrapEmailHtml("Booking Cancelled", `
+              <p>Hi <strong>${loser.student.name}</strong>,</p>
+              <p>Another student placed a higher winning bid for this property.</p>
+              <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:14px;">
+                <tr><td style="padding:8px 0;color:#6b7280;width:140px;">Property</td><td style="padding:8px 0;font-weight:600;color:#192F59;">${loser.property.title}</td></tr>
+                <tr><td style="padding:8px 0;color:#6b7280;">Location</td><td style="padding:8px 0;">${loser.property.location.name}</td></tr>
+                <tr><td style="padding:8px 0;color:#6b7280;">Status</td><td style="padding:8px 0;"><span style="background:#fee2e2;color:#991b1b;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:600;">CANCELLED</span></td></tr>
+              </table>
+              <p style="margin:28px 0;">
+                <a href="${dashboardUrl}" style="background:#192F59;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold;display:inline-block;">Browse Other Properties</a>
+              </p>
+              <p style="color:#6b7280;font-size:13px;">You can browse other available properties and submit a new booking request.</p>
+            `);
+            enqueueEmail(loser.student.email, `Booking cancelled — ${loser.property.title}`, cancelledHtml).catch(console.error);
           }),
         );
       }
     }
 
     if (status === "CANCELLED") {
-      sendBookingCancelledToStudent({
-        studentEmail: updated.student.email,
-        studentName: updated.student.name,
-        propertyTitle: updated.property.title,
-        propertyLocation: updated.property.location.name,
-        cancelledBy: "landlord",
-      }).catch(console.error);
+      const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/student`;
+      const html = wrapEmailHtml("Booking Cancelled", `
+        <p>Hi <strong>${updated.student.name}</strong>,</p>
+        <p>The landlord has declined your booking request.</p>
+        <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:14px;">
+          <tr><td style="padding:8px 0;color:#6b7280;width:140px;">Property</td><td style="padding:8px 0;font-weight:600;color:#192F59;">${updated.property.title}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Location</td><td style="padding:8px 0;">${updated.property.location.name}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Status</td><td style="padding:8px 0;"><span style="background:#fee2e2;color:#991b1b;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:600;">CANCELLED</span></td></tr>
+        </table>
+        <p style="margin:28px 0;">
+          <a href="${dashboardUrl}" style="background:#192F59;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold;display:inline-block;">Browse Other Properties</a>
+        </p>
+        <p style="color:#6b7280;font-size:13px;">You can browse other available properties and submit a new booking request.</p>
+      `);
+      enqueueEmail(updated.student.email, `Booking cancelled — ${updated.property.title}`, html).catch(console.error);
 
       await notifyUser({
         userId: updated.student.id,

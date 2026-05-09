@@ -6,7 +6,7 @@
 import { NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
 import prisma from "@/lib/prisma";
-import { sendPaymentConfirmedToStudent, sendPaymentReceivedToLandlord } from "@/lib/email";
+import { enqueueEmail, wrapEmailHtml } from "@/lib/tasks";
 import { notifyUser } from "@/lib/notifications";
 
 export const runtime = "nodejs";
@@ -113,26 +113,41 @@ export async function POST(request: Request) {
       ]);
 
       const formatted = Number(amountNaira).toLocaleString("en-NG");
-      sendPaymentConfirmedToStudent({
-        studentEmail: booking.student.email,
-        studentName: booking.student.name,
-        propertyTitle: booking.property.title,
-        propertyLocation: booking.property.location.name,
-        landlordName: booking.property.landlord.name,
-        landlordPhone: booking.property.landlord.phoneNumber ?? "",
-        amount: formatted,
-        paystackRef: reference,
-        bookingId,
-      }).catch(console.error);
+      const receiptUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/student/bookings/${bookingId}/receipt`;
+      const studentHtml = wrapEmailHtml("Payment Confirmed", `
+        <p>Hi <strong>${booking.student.name}</strong>,</p>
+        <p>Your payment has been received and your accommodation is now <strong style="color:#16a34a;">secured</strong>!</p>
+        <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:14px;">
+          <tr><td style="padding:8px 0;color:#6b7280;width:160px;">Property</td><td style="padding:8px 0;font-weight:600;color:#192F59;">${booking.property.title}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Location</td><td style="padding:8px 0;">${booking.property.location.name}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Amount Paid</td><td style="padding:8px 0;font-weight:600;">&#8358;${formatted}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Reference</td><td style="padding:8px 0;font-family:monospace;font-size:13px;">${reference}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Landlord</td><td style="padding:8px 0;">${booking.property.landlord.name}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Landlord Phone</td><td style="padding:8px 0;">${booking.property.landlord.phoneNumber || 'Contact via dashboard'}</td></tr>
+        </table>
+        <p style="margin:28px 0;">
+          <a href="${receiptUrl}" style="background:#E67E22;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold;display:inline-block;">View Receipt</a>
+        </p>
+        <p style="color:#6b7280;font-size:13px;">Keep this email as proof of payment. Contact the landlord directly to arrange move-in.</p>
+      `);
+      enqueueEmail(booking.student.email, `Payment confirmed — ${booking.property.title}`, studentHtml).catch(console.error);
 
-      sendPaymentReceivedToLandlord({
-        landlordEmail: booking.property.landlord.email,
-        landlordName: booking.property.landlord.name,
-        studentName: booking.student.name,
-        propertyTitle: booking.property.title,
-        amount: formatted,
-        paystackRef: reference,
-      }).catch(console.error);
+      const landlordDashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/landlord`;
+      const landlordHtml = wrapEmailHtml("Payment Received", `
+        <p>Hi <strong>${booking.property.landlord.name}</strong>,</p>
+        <p>A student has completed payment for your property. The booking is now fully confirmed.</p>
+        <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:14px;">
+          <tr><td style="padding:8px 0;color:#6b7280;width:160px;">Property</td><td style="padding:8px 0;font-weight:600;color:#192F59;">${booking.property.title}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Student</td><td style="padding:8px 0;">${booking.student.name}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Amount</td><td style="padding:8px 0;font-weight:600;">&#8358;${formatted}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Reference</td><td style="padding:8px 0;font-family:monospace;font-size:13px;">${reference}</td></tr>
+        </table>
+        <p style="margin:28px 0;">
+          <a href="${landlordDashboardUrl}" style="background:#192F59;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold;display:inline-block;">View Dashboard</a>
+        </p>
+        <p style="color:#6b7280;font-size:13px;">Please reach out to the student to coordinate move-in details.</p>
+      `);
+      enqueueEmail(booking.property.landlord.email, `Payment received — ${booking.property.title}`, landlordHtml).catch(console.error);
 
       await Promise.all([
         notifyUser({

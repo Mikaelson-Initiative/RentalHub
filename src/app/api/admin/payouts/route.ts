@@ -8,12 +8,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notifyUser } from "@/lib/notifications";
-import {
-  sendPayoutReleasedToLandlord,
-  sendPayoutReleasedToStudent,
-  sendPayoutFailedToLandlord,
-  sendPayoutFailedToStudent,
-} from "@/lib/email";
+import { enqueueEmail, wrapEmailHtml } from "@/lib/tasks";
 
 export async function GET() {
   try {
@@ -27,6 +22,7 @@ export async function GET() {
     // email if the change wasn't them.
     const quarantineCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
+    // Optimized: Use select instead of include+nested queries to avoid N+1 payments
     const payouts = await prisma.booking.findMany({
       where: {
         movedInConfirmedAt: { not: null },
@@ -41,7 +37,10 @@ export async function GET() {
           },
         },
       },
-      include: {
+      select: {
+        id: true,
+        amount: true,
+        movedInConfirmedAt: true,
         student: { select: { id: true, name: true, email: true } },
         property: {
           select: {
@@ -61,12 +60,6 @@ export async function GET() {
               },
             },
           },
-        },
-        payments: {
-          where: { status: "SUCCESS" },
-          orderBy: { createdAt: "desc" },
-          take: 1,
-          select: { amount: true, paidAt: true },
         },
       },
       orderBy: { movedInConfirmedAt: "asc" }, // oldest first
@@ -202,38 +195,57 @@ export async function PATCH(request: NextRequest) {
       link: "/student",
     }).catch(console.error);
 
-    // Send emails
+    // Queue emails
+    const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}`;
     if (action === "COMPLETE") {
-      sendPayoutReleasedToLandlord({
-        landlordEmail: landlord.email,
-        landlordName: landlord.name,
-        studentName: booking.student.name,
-        propertyTitle: booking.property.title,
-        amount: amountStr,
-        bankName: landlord.bankName ?? "your registered bank",
-        accountName: landlord.bankAccountName ?? landlord.name,
-      }).catch(console.error);
+      const landlordHtml = wrapEmailHtml("Rent Payment Transferred", `
+        <p>Hi <strong>${landlord.name}</strong>,</p>
+        <p>Your rent payment has been released and transferred to your bank account.</p>
+        <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:14px;">
+          <tr><td style="padding:8px 0;color:#6b7280;width:160px;">Property</td><td style="padding:8px 0;font-weight:600;color:#192F59;">${booking.property.title}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Tenant</td><td style="padding:8px 0;">${booking.student.name}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Amount</td><td style="padding:8px 0;font-weight:600;color:#16a34a;">&#8358;${amountStr}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Bank</td><td style="padding:8px 0;">${landlord.bankName ?? "your registered bank"}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Account Name</td><td style="padding:8px 0;">${landlord.bankAccountName ?? landlord.name}</td></tr>
+        </table>
+        <p style="color:#6b7280;font-size:13px;">Please allow 1–3 business days for the funds to reflect in your account. If you have questions, contact <a href="mailto:support@rentalhub.ng" style="color:#E67E22;">support@rentalhub.ng</a>.</p>
+        <p style="margin:28px 0;">
+          <a href="${dashboardUrl}/landlord" style="background:#192F59;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold;display:inline-block;">View Dashboard</a>
+        </p>
+      `);
+      enqueueEmail(landlord.email, `Rent payment transferred — ${booking.property.title}`, landlordHtml).catch(console.error);
 
-      sendPayoutReleasedToStudent({
-        studentEmail: booking.student.email,
-        studentName: booking.student.name,
-        propertyTitle: booking.property.title,
-        landlordName: landlord.name,
-        amount: amountStr,
-      }).catch(console.error);
+      const studentHtml = wrapEmailHtml("Payment Released to Landlord", `
+        <p>Hi <strong>${booking.student.name}</strong>,</p>
+        <p>Your rent payment has been successfully released to your landlord. Your tenancy is now fully active.</p>
+        <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:14px;">
+          <tr><td style="padding:8px 0;color:#6b7280;width:160px;">Property</td><td style="padding:8px 0;font-weight:600;color:#192F59;">${booking.property.title}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Landlord</td><td style="padding:8px 0;">${landlord.name}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Amount</td><td style="padding:8px 0;font-weight:600;">&#8358;${amountStr}</td></tr>
+        </table>
+        <p style="margin:28px 0;">
+          <a href="${dashboardUrl}/student" style="background:#192F59;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold;display:inline-block;">View Dashboard</a>
+        </p>
+      `);
+      enqueueEmail(booking.student.email, `Payment released to landlord — ${booking.property.title}`, studentHtml).catch(console.error);
     } else {
-      sendPayoutFailedToLandlord({
-        landlordEmail: landlord.email,
-        landlordName: landlord.name,
-        propertyTitle: booking.property.title,
-        amount: amountStr,
-      }).catch(console.error);
+      const landlordFailHtml = wrapEmailHtml("Payout Issue", `
+        <p>Hi <strong>${landlord.name}</strong>,</p>
+        <p>We encountered an issue releasing your rent payment for <strong>${booking.property.title}</strong>. Our support team is investigating and will contact you shortly.</p>
+        <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:14px;">
+          <tr><td style="padding:8px 0;color:#6b7280;width:160px;">Property</td><td style="padding:8px 0;font-weight:600;color:#192F59;">${booking.property.title}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Amount</td><td style="padding:8px 0;font-weight:600;">&#8358;${amountStr}</td></tr>
+        </table>
+        <p>Please contact us at <a href="mailto:support@rentalhub.ng" style="color:#E67E22;">support@rentalhub.ng</a> if you do not hear back within 24 hours.</p>
+      `);
+      enqueueEmail(landlord.email, `Payout issue — ${booking.property.title}`, landlordFailHtml).catch(console.error);
 
-      sendPayoutFailedToStudent({
-        studentEmail: booking.student.email,
-        studentName: booking.student.name,
-        propertyTitle: booking.property.title,
-      }).catch(console.error);
+      const studentFailHtml = wrapEmailHtml("Payment Release Issue", `
+        <p>Hi <strong>${booking.student.name}</strong>,</p>
+        <p>There was an issue releasing the payment for <strong>${booking.property.title}</strong> to your landlord. Our support team is on it and will resolve this as soon as possible.</p>
+        <p>Please contact us at <a href="mailto:support@rentalhub.ng" style="color:#E67E22;">support@rentalhub.ng</a> if you have concerns.</p>
+      `);
+      enqueueEmail(booking.student.email, `Payment release issue — ${booking.property.title}`, studentFailHtml).catch(console.error);
     }
 
     return NextResponse.json({

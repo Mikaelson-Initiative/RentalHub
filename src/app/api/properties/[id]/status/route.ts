@@ -8,7 +8,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
-import { sendPropertyApprovedToLandlord, sendPropertyRejectedToLandlord } from '@/lib/email';
+import { enqueueEmail, wrapEmailHtml } from '@/lib/tasks';
 import { notifyUser } from '@/lib/notifications';
 import type { PropertyStatus } from '@prisma/client';
 
@@ -58,14 +58,25 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       },
     });
 
-    // Notify the landlord of the review outcome (fire-and-forget)
+    // Queue notifications to landlord about review outcome
     if (status === 'APPROVED') {
-      sendPropertyApprovedToLandlord({
-        landlordEmail: property.landlord.email,
-        landlordName:  property.landlord.name,
-        propertyTitle: property.title,
-        propertyId:    property.id,
-      }).catch((err) => console.error('[email] property approved notification failed:', err));
+      const propertyUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/properties/${property.id}`;
+      const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/landlord`;
+      const html = wrapEmailHtml("Listing Approved ✅", `
+        <p>Hi <strong>${property.landlord.name}</strong>,</p>
+        <p>Congratulations! Your property listing has been <strong style="color:#16a34a;">approved</strong> and is now live on RentalHub.</p>
+        <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:14px;">
+          <tr><td style="padding:8px 0;color:#6b7280;width:140px;">Property</td><td style="padding:8px 0;font-weight:600;color:#192F59;">${property.title}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Status</td><td style="padding:8px 0;"><span style="background:#dcfce7;color:#166534;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:600;">APPROVED</span></td></tr>
+        </table>
+        <p style="margin:28px 0;">
+          <a href="${propertyUrl}" style="background:#E67E22;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold;display:inline-block;">View Live Listing</a>
+          &nbsp;&nbsp;
+          <a href="${dashboardUrl}" style="background:#192F59;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold;display:inline-block;">My Dashboard</a>
+        </p>
+        <p style="color:#6b7280;font-size:13px;">Students can now discover and book your property through RentalHub.</p>
+      `);
+      enqueueEmail(property.landlord.email, `Your listing has been approved — ${property.title}`, html).catch((err) => console.error('[email] property approved queue failed:', err));
 
       await notifyUser({
         userId: property.landlordId,
@@ -75,12 +86,23 @@ export async function PATCH(request: Request, { params }: RouteContext) {
         link: `/landlord/properties/${property.id}`,
       });
     } else if (status === 'REJECTED') {
-      sendPropertyRejectedToLandlord({
-        landlordEmail: property.landlord.email,
-        landlordName:  property.landlord.name,
-        propertyTitle: property.title,
-        reviewNote:    reason?.trim() ?? '',
-      }).catch((err) => console.error('[email] property rejected notification failed:', err));
+      const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/landlord`;
+      const html = wrapEmailHtml("Listing Not Approved", `
+        <p>Hi <strong>${property.landlord.name}</strong>,</p>
+        <p>After review, your property listing requires some changes before it can be published on RentalHub.</p>
+        <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:14px;">
+          <tr><td style="padding:8px 0;color:#6b7280;width:140px;">Property</td><td style="padding:8px 0;font-weight:600;color:#192F59;">${property.title}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Status</td><td style="padding:8px 0;"><span style="background:#fee2e2;color:#991b1b;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:600;">REJECTED</span></td></tr>
+        </table>
+        <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:16px;border-radius:4px;margin:20px 0;">
+          <p style="margin:0;font-size:14px;color:#92400e;"><strong>Reviewer's note:</strong><br/>${reason?.trim() ?? ''}</p>
+        </div>
+        <p style="margin:28px 0;">
+          <a href="${dashboardUrl}" style="background:#192F59;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold;display:inline-block;">View Dashboard</a>
+        </p>
+        <p style="color:#6b7280;font-size:13px;">Please address the feedback above and submit a new listing. If you have questions, contact our support team at <a href="mailto:support@rentalhub.ng" style="color:#E67E22;">support@rentalhub.ng</a>.</p>
+      `);
+      enqueueEmail(property.landlord.email, `Listing update required — ${property.title}`, html).catch((err) => console.error('[email] property rejected queue failed:', err));
 
       await notifyUser({
         userId: property.landlordId,

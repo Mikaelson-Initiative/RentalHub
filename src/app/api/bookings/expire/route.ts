@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 import prisma from "@/lib/prisma";
-import { sendBookingExpiredToStudent } from "@/lib/email";
+import { enqueueEmail, wrapEmailHtml } from "@/lib/tasks";
 import { notifyUser } from "@/lib/notifications";
 
 export async function POST(request: Request) {
@@ -48,11 +48,16 @@ export async function POST(request: Request) {
     });
 
     for (const b of expired) {
-      sendBookingExpiredToStudent({
-        studentEmail: b.student.email,
-        studentName: b.student.name,
-        propertyTitle: b.property.title,
-      }).catch(console.error);
+      const browseUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/properties`;
+      const html = wrapEmailHtml("Booking Expired", `
+        <p>Hi <strong>${b.student.name}</strong>,</p>
+        <p>Your booking for <strong>${b.property.title}</strong> has expired because payment was not completed within 48 hours.</p>
+        <p>The property may still be available. Browse and book again to secure your accommodation.</p>
+        <p style="margin:28px 0;">
+          <a href="${browseUrl}" style="background:#E67E22;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold;display:inline-block;">Browse Properties</a>
+        </p>
+      `);
+      enqueueEmail(b.student.email, `Booking expired — ${b.property.title}`, html).catch(console.error);
 
       await notifyUser({
         userId: b.studentId,

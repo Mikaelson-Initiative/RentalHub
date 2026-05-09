@@ -13,6 +13,7 @@ import { rateLimit, getRateLimitKey } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { createEmailOtp } from '@/lib/otp';
 import { sendEmailVerificationOtp } from '@/lib/email';
+import { enqueueEmail } from '@/lib/tasks';
 import { notifyUser } from '@/lib/notifications';
 
 type AllowedRole = 'STUDENT' | 'LANDLORD';
@@ -73,25 +74,17 @@ export async function POST(request: Request) {
     if (existing) {
       if (!existing.emailVerified) {
         const otp = await createEmailOtp(existing.id, existing.email);
-        const sent = await sendEmailVerificationOtp({
-          to: existing.email,
-          name: existing.name,
-          otpCode: otp,
-        });
 
-        if (!sent) {
-          logger.error("[REGISTER OTP RESEND ERROR]", { error: "Email provider returned unsuccessful delivery status." });
-          return NextResponse.json(
-            { success: false, error: "We couldn't send OTP right now. Please use Resend OTP on the verify page in a few seconds." },
-            { status: 502 },
-          );
-        }
+        // Queue OTP email in background instead of blocking
+        enqueueEmail(existing.email, "Verify your RentalHub email",
+          `Hi <strong>${existing.name}</strong>,<br/><br/>Your OTP code is: <strong>${otp}</strong><br/><br/>This code expires in 10 minutes.`
+        ).catch(err => logger.error("[REGISTER OTP QUEUE ERROR]", err));
 
         await notifyUser({
           userId: existing.id,
           type: "ACCOUNT",
           title: "Verify your email",
-          message: "We re-sent your OTP code. Verify your email to continue.",
+          message: "We sent your OTP code. Verify your email to continue.",
           link: `/verify-email?email=${encodeURIComponent(existing.email)}`,
         });
 
@@ -135,22 +128,11 @@ export async function POST(request: Request) {
     });
 
     const otp = await createEmailOtp(user.id, user.email);
-    const sent = await sendEmailVerificationOtp({
-      to: user.email,
-      name: user.name,
-      otpCode: otp,
-    });
 
-    if (!sent) {
-      logger.error("[REGISTER OTP EMAIL ERROR]", { error: "Email provider returned unsuccessful delivery status." });
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Account created, but OTP email could not be sent right now. Please open verify-email and tap Resend OTP.",
-        },
-        { status: 502 },
-      );
-    }
+    // Queue OTP email in background instead of blocking
+    enqueueEmail(user.email, "Verify your RentalHub email",
+      `Hi <strong>${user.name}</strong>,<br/><br/>Your OTP code is: <strong>${otp}</strong><br/><br/>This code expires in 10 minutes.`
+    ).catch(err => logger.error("[REGISTER OTP QUEUE ERROR]", err));
 
     await notifyUser({
       userId: user.id,

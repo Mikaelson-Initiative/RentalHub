@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { sendBankAccountChangedEmail } from "@/lib/email";
+import { enqueueEmail, wrapEmailHtml } from "@/lib/tasks";
 
 export async function GET() {
   try {
@@ -114,15 +114,19 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // V12 fix: notify the landlord out-of-band so a hijacked session leaves
-    // an inbox trail. Fire-and-forget — don't block the response on email.
+    // V12 fix: queue bank account change notification (fire-and-forget)
     const masked = `•••• •••• ${accountNumber.slice(-4)}`;
-    sendBankAccountChangedEmail({
-      to: landlord.email,
-      name: landlord.name,
-      bankName,
-      maskedAccountNumber: masked,
-    }).catch((err) => console.error("[bank-account] change-notification email failed:", err));
+    const html = wrapEmailHtml("Bank Account Changed", `
+      <p>Hi <strong>${landlord.name}</strong>,</p>
+      <p>Your RentalHub payout bank account was just updated to:</p>
+      <p style="background:#f8fafc;padding:16px;border-radius:8px;font-family:monospace;">
+        ${bankName}<br>
+        Account: ${masked}
+      </p>
+      <p style="color:#991b1b;"><strong>If this wasn't you</strong>, contact support at <a href="mailto:support@rentalhub.ng" style="color:#E67E22;">support@rentalhub.ng</a> immediately.</p>
+      <p style="color:#475569;font-size:13px;">For your safety, all rent payouts to this landlord account are paused for the next 24 hours while we verify the change.</p>
+    `);
+    enqueueEmail(landlord.email, "RentalHub — payout bank account changed", html).catch((err) => console.error("[bank-account] change-notification email queue failed:", err));
 
     return NextResponse.json({
       success: true,

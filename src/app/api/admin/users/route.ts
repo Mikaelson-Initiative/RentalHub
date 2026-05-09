@@ -3,14 +3,11 @@ import { getServerSession } from "next-auth";
 import prisma from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 import { Role } from "@prisma/client";
-import {
-  sendAccountSuspendedEmail,
-  sendAccountUnsuspendedEmail,
-  sendRoleChangedEmail,
-} from "@/lib/email";
+import { enqueueEmail, wrapEmailHtml } from "@/lib/tasks";
 import { notifyUser } from "@/lib/notifications";
+import { getOrSet } from "@/lib/cache";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions);
 
@@ -22,20 +19,58 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "Admin access required." }, { status: 403 });
     }
 
-    const users = await prisma.user.findMany({
-      include: {
-        _count: {
-          select: {
-            properties: true,
-            bookings: true,
-          },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 300,
-    });
+    const { searchParams } = new URL(request.url);
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const pageSize = Math.min(100, Math.max(5, parseInt(searchParams.get("pageSize") || "20", 10)));
 
-    return NextResponse.json({ success: true, data: users });
+    const cacheKey = `admin:users:page:${page}:size:${pageSize}`;
+    const TTL_SECONDS = 10 * 60; // 10 minutes
+
+    const result = await getOrSet(
+      cacheKey,
+      async () => {
+        const total = await prisma.user.count();
+
+        const users = await prisma.user.findMany({
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            verificationStatus: true,
+            emailVerified: true,
+            phoneVerified: true,
+            createdAt: true,
+            _count: {
+              select: {
+                properties: true,
+                bookings: true,
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        });
+
+        return {
+          users,
+          pagination: {
+            page,
+            pageSize,
+            total,
+            pages: Math.ceil(total / pageSize),
+          },
+        };
+      },
+      TTL_SECONDS
+    );
+
+    return NextResponse.json({
+      success: true,
+      data: result.users,
+      pagination: result.pagination,
+    });
   } catch (error) {
     console.error("[ADMIN USERS GET ERROR]", error);
     return NextResponse.json({ success: false, error: "Failed to fetch users." }, { status: 500 });
@@ -99,12 +134,22 @@ export async function PATCH(request: Request) {
         select: { id: true, name: true, email: true, role: true },
       });
 
-      sendRoleChangedEmail({
-        to: updated.email,
-        name: updated.name,
-        oldRole,
-        newRole: updated.role,
-      }).catch((error) => console.error("[email] role changed notification failed:", error));
+      const dashboardUrl =
+        updated.role === "ADMIN" ? `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/admin` :
+        updated.role === "LANDLORD" ? `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/landlord` :
+        `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/student`;
+      const roleHtml = wrapEmailHtml("Role Updated", `
+        <p>Hi <strong>${updated.name}</strong>,</p>
+        <p>Your account role has been updated by an admin.</p>
+        <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:14px;">
+          <tr><td style="padding:8px 0;color:#6b7280;width:140px;">Previous role</td><td style="padding:8px 0;">${oldRole}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">New role</td><td style="padding:8px 0;font-weight:600;color:#192F59;">${updated.role}</td></tr>
+        </table>
+        <p style="margin:28px 0;">
+          <a href="${dashboardUrl}" style="background:#192F59;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold;display:inline-block;">Open Dashboard</a>
+        </p>
+      `);
+      enqueueEmail(updated.email, "Your RentalHub account role was updated", roleHtml).catch((error) => console.error("[email] role changed queue failed:", error));
 
       await notifyUser({
         userId: updated.id,
@@ -129,15 +174,22 @@ export async function PATCH(request: Request) {
     });
 
     if (suspended) {
-      sendAccountSuspendedEmail({
-        to: updated.email,
-        name: updated.name,
-      }).catch((error) => console.error("[email] account suspended notification failed:", error));
+      const suspendedHtml = wrapEmailHtml("Account Suspended", `
+        <p>Hi <strong>${updated.name}</strong>,</p>
+        <p>Your account has been <strong style="color:#991b1b;">suspended</strong> by the platform admin.</p>
+        <p>If you believe this is a mistake, please contact support at <a href="mailto:support@rentalhub.ng" style="color:#E67E22;">support@rentalhub.ng</a>.</p>
+      `);
+      enqueueEmail(updated.email, "Your RentalHub account has been suspended", suspendedHtml).catch((error) => console.error("[email] account suspended queue failed:", error));
     } else {
-      sendAccountUnsuspendedEmail({
-        to: updated.email,
-        name: updated.name,
-      }).catch((error) => console.error("[email] account unsuspended notification failed:", error));
+      const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/login`;
+      const unsuspendedHtml = wrapEmailHtml("Account Reactivated", `
+        <p>Hi <strong>${updated.name}</strong>,</p>
+        <p>Your account has been reactivated and you can now sign in again.</p>
+        <p style="margin:28px 0;">
+          <a href="${loginUrl}" style="background:#E67E22;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold;display:inline-block;">Sign In</a>
+        </p>
+      `);
+      enqueueEmail(updated.email, "Your RentalHub account has been reactivated", unsuspendedHtml).catch((error) => console.error("[email] account unsuspended queue failed:", error));
     }
 
     await notifyUser({

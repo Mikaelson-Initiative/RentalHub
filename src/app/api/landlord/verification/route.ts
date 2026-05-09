@@ -7,10 +7,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
-import {
-  sendVerificationSubmissionReceivedToLandlord,
-  sendVerificationSubmittedToAdmin,
-} from "@/lib/email";
+import { enqueueEmail, wrapEmailHtml } from "@/lib/tasks";
 import { notifyRole, notifyUser } from "@/lib/notifications";
 import { sanitizeInternalBlobPath, sanitizeText } from "@/lib/sanitize";
 
@@ -156,24 +153,41 @@ export async function POST(request: Request) {
       select: { verificationStatus: true, verificationSubmittedAt: true },
     });
 
-    // Notify admin about the new verification submission (fire-and-forget)
+    // Queue verification notifications
     const adminEmail = process.env.ADMIN_EMAIL ?? "admin@bouesti.edu.ng";
     const landlordUser = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { name: true, email: true },
     });
     if (landlordUser) {
-      sendVerificationSubmittedToAdmin({
-        adminEmail,
-        landlordName: landlordUser.name,
-        landlordEmail: landlordUser.email,
-        submittedAt: new Date().toLocaleString("en-NG", { dateStyle: "medium", timeStyle: "short" }),
-      }).catch((err) => console.error("[email] verification submitted admin notification failed:", err));
+      const submittedAt = new Date().toLocaleString("en-NG", { dateStyle: "medium", timeStyle: "short" });
+      const adminDashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/admin`;
+      const adminHtml = wrapEmailHtml("New Verification Submission", `
+        <p>Hi Admin,</p>
+        <p>A landlord has submitted their verification documents and is awaiting review.</p>
+        <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:14px;">
+          <tr><td style="padding:8px 0;color:#6b7280;width:140px;">Name</td><td style="padding:8px 0;font-weight:600;color:#192F59;">${landlordUser.name}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Email</td><td style="padding:8px 0;">${landlordUser.email}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Submitted</td><td style="padding:8px 0;">${submittedAt}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;">Status</td><td style="padding:8px 0;"><span style="background:#dbeafe;color:#1e40af;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:600;">UNDER REVIEW</span></td></tr>
+        </table>
+        <p style="margin:28px 0;">
+          <a href="${adminDashboardUrl}" style="background:#192F59;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold;display:inline-block;">Review in Admin Dashboard</a>
+        </p>
+      `);
+      enqueueEmail(adminEmail, `Verification documents submitted — ${landlordUser.name}`, adminHtml).catch((err) => console.error("[email] verification submitted admin queue failed:", err));
 
-      sendVerificationSubmissionReceivedToLandlord({
-        landlordEmail: landlordUser.email,
-        landlordName: landlordUser.name,
-      }).catch((err) => console.error("[email] verification submission received landlord notification failed:", err));
+      const landlordDashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/landlord`;
+      const landlordHtml = wrapEmailHtml("Verification Submitted", `
+        <p>Hi <strong>${landlordUser.name}</strong>,</p>
+        <p>We received your verification documents successfully.</p>
+        <p>Your account is now under review. This typically takes <strong>24–48 hours</strong>.</p>
+        <p style="margin:28px 0;">
+          <a href="${landlordDashboardUrl}" style="background:#192F59;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold;display:inline-block;">Go to Dashboard</a>
+        </p>
+        <p style="color:#6b7280;font-size:13px;">We will notify you by email once a decision is made.</p>
+      `);
+      enqueueEmail(landlordUser.email, "Verification submitted — under review", landlordHtml).catch((err) => console.error("[email] verification submission received landlord queue failed:", err));
 
       await Promise.all([
         notifyUser({

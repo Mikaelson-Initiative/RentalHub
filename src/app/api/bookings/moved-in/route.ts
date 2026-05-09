@@ -10,7 +10,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notifyUser } from "@/lib/notifications";
-import { sendMoveInConfirmedToStudent, sendMoveInConfirmedToLandlord } from "@/lib/email";
+import { enqueueEmail, wrapEmailHtml } from "@/lib/tasks";
 
 export async function POST(request: NextRequest) {
   try {
@@ -76,6 +76,8 @@ export async function POST(request: NextRequest) {
 
     const amountNaira = Number(booking.amount ?? booking.property.price);
     const movedInDateStr = new Date().toLocaleDateString("en-NG", { dateStyle: "medium" });
+    const studentDashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/student`;
+    const landlordDashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/landlord`;
 
     // Notify landlord (in-app)
     notifyUser({
@@ -86,25 +88,39 @@ export async function POST(request: NextRequest) {
       link: "/landlord",
     }).catch(console.error);
 
-    // Email landlord
-    sendMoveInConfirmedToLandlord({
-      landlordEmail: landlord.email,
-      landlordName: landlord.name,
-      studentName: booking.student.name,
-      propertyTitle: booking.property.title,
-      amount: amountNaira.toLocaleString("en-NG"),
-      movedInDate: movedInDateStr,
-    }).catch(console.error);
+    // Queue email to landlord
+    const landlordHtml = wrapEmailHtml("Tenant Has Moved In", `
+      <p>Hi <strong>${landlord.name}</strong>,</p>
+      <p>Your tenant <strong>${booking.student.name}</strong> has confirmed their move-in. RentalHub is processing the release of their rent payment to your bank account.</p>
+      <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:14px;">
+        <tr><td style="padding:8px 0;color:#6b7280;width:160px;">Property</td><td style="padding:8px 0;font-weight:600;color:#192F59;">${booking.property.title}</td></tr>
+        <tr><td style="padding:8px 0;color:#6b7280;">Tenant</td><td style="padding:8px 0;">${booking.student.name}</td></tr>
+        <tr><td style="padding:8px 0;color:#6b7280;">Amount</td><td style="padding:8px 0;font-weight:600;">&#8358;${amountNaira.toLocaleString("en-NG")}</td></tr>
+        <tr><td style="padding:8px 0;color:#6b7280;">Move-in Date</td><td style="padding:8px 0;">${movedInDateStr}</td></tr>
+      </table>
+      <p style="color:#6b7280;font-size:13px;">You will receive a separate email once the payment has been transferred to your bank account.</p>
+      <p style="margin:28px 0;">
+        <a href="${landlordDashboardUrl}" style="background:#192F59;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold;display:inline-block;">View Dashboard</a>
+      </p>
+    `);
+    enqueueEmail(landlord.email, `Tenant moved in — ${booking.property.title}`, landlordHtml).catch(console.error);
 
-    // Email student
-    sendMoveInConfirmedToStudent({
-      studentEmail: booking.student.email,
-      studentName: booking.student.name,
-      propertyTitle: booking.property.title,
-      propertyLocation: booking.property.location?.name ?? "",
-      landlordName: landlord.name,
-      movedInDate: movedInDateStr,
-    }).catch(console.error);
+    // Queue email to student
+    const studentHtml = wrapEmailHtml("Move-In Confirmed", `
+      <p>Hi <strong>${booking.student.name}</strong>,</p>
+      <p>We have received your move-in confirmation. RentalHub will now process the release of your rent payment to the landlord.</p>
+      <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:14px;">
+        <tr><td style="padding:8px 0;color:#6b7280;width:160px;">Property</td><td style="padding:8px 0;font-weight:600;color:#192F59;">${booking.property.title}</td></tr>
+        <tr><td style="padding:8px 0;color:#6b7280;">Location</td><td style="padding:8px 0;">${booking.property.location?.name ?? ""}</td></tr>
+        <tr><td style="padding:8px 0;color:#6b7280;">Landlord</td><td style="padding:8px 0;">${landlord.name}</td></tr>
+        <tr><td style="padding:8px 0;color:#6b7280;">Move-in Date</td><td style="padding:8px 0;font-weight:600;">${movedInDateStr}</td></tr>
+      </table>
+      <p style="color:#6b7280;font-size:13px;">Your landlord will be notified. You will receive a confirmation once the payment has been released.</p>
+      <p style="margin:28px 0;">
+        <a href="${studentDashboardUrl}" style="background:#192F59;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold;display:inline-block;">View Dashboard</a>
+      </p>
+    `);
+    enqueueEmail(booking.student.email, `Move-in confirmed — ${booking.property.title}`, studentHtml).catch(console.error);
 
     // Notify all admins so they can manually process the payout
     const admins = await prisma.user.findMany({

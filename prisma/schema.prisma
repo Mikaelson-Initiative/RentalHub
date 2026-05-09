@@ -175,6 +175,7 @@ model Property {
   @@index([status, createdAt(sort: Desc)])
   @@index([reviewedById])
   @@index([price])
+  @@index([landlordId, status])
   @@map("properties")
 }
 
@@ -220,6 +221,7 @@ model Booking {
   @@index([status])
   @@index([paymentStatus])
   @@index([expiresAt])
+  @@index([propertyId, status])
   @@map("bookings")
 }
 
@@ -244,6 +246,7 @@ model Payment {
   @@index([bookingId])
   @@index([paystackRef])
   @@index([status])
+  @@index([bookingId, status])
   @@map("payments")
 }
 

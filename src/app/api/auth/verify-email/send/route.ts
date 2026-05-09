@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { createEmailOtp } from "@/lib/otp";
 import { sendEmailVerificationOtp } from "@/lib/email";
+import { enqueueEmail } from "@/lib/tasks";
 import { rateLimit, getRateLimitKey } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
@@ -47,18 +48,11 @@ export async function POST(request: Request) {
     }
 
     const otp = await createEmailOtp(user.id, user.email);
-    const sent = await sendEmailVerificationOtp({
-      to: user.email,
-      name: user.name,
-      otpCode: otp,
-    });
 
-    if (!sent) {
-      return NextResponse.json(
-        { success: false, error: "Unable to send OTP right now. Please try again shortly." },
-        { status: 502 },
-      );
-    }
+    // Queue OTP email in background
+    enqueueEmail(user.email, "Verify your RentalHub email",
+      `Hi <strong>${user.name}</strong>,<br/><br/>Your OTP code is: <strong>${otp}</strong><br/><br/>This code expires in 10 minutes.`
+    ).catch(err => console.error("[VERIFY EMAIL SEND QUEUE ERROR]", err));
 
     return NextResponse.json({
       success: true,

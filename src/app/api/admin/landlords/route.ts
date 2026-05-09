@@ -15,22 +15,30 @@ import {
 } from "@/lib/email";
 import { notifyUser } from "@/lib/notifications";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user || session.user.role !== "ADMIN") {
       return NextResponse.json({ success: false, error: "Admin access required." }, { status: 403 });
     }
 
+    const { searchParams } = new URL(request.url);
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const pageSize = Math.min(100, Math.max(5, parseInt(searchParams.get("pageSize") || "20", 10)));
+
+    const whereClause = {
+      role: "LANDLORD" as const,
+      OR: [
+        { verificationStatus: { in: ["UNVERIFIED", "UNDER_REVIEW", "REJECTED", "SUSPENDED"] } },
+        // Also return VERIFIED landlords who have no documents (verified without proper review)
+        { verificationStatus: "VERIFIED" as const, governmentIdUrl: null },
+      ],
+    };
+
+    const total = await prisma.user.count({ where: whereClause });
+
     const landlords = await prisma.user.findMany({
-      where: {
-        role: "LANDLORD",
-        OR: [
-          { verificationStatus: { in: ["UNVERIFIED", "UNDER_REVIEW", "REJECTED", "SUSPENDED"] } },
-          // Also return VERIFIED landlords who have no documents (verified without proper review)
-          { verificationStatus: "VERIFIED", governmentIdUrl: null },
-        ],
-      },
+      where: whereClause,
       select: {
         id:                      true,
         name:                    true,
@@ -50,9 +58,20 @@ export async function GET() {
         _count: { select: { properties: true } },
       },
       orderBy: { verificationSubmittedAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
     });
 
-    return NextResponse.json({ success: true, data: landlords });
+    return NextResponse.json({
+      success: true,
+      data: landlords,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        pages: Math.ceil(total / pageSize),
+      },
+    });
   } catch (error) {
     console.error("[ADMIN LANDLORDS GET ERROR]", error);
     return NextResponse.json({ success: false, error: "Failed to fetch landlords." }, { status: 500 });
