@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth-stub";
 import { ShieldAlert, ShieldX, Clock, TrendingUp } from "lucide-react";
 
 interface Listing {

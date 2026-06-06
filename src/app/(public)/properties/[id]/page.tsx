@@ -1,14 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { notFound } from "next/navigation";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import prisma from "@/lib/prisma";
 import { getPropertyImage } from "@/lib/property-image";
 import BookButton from "@/components/BookButton";
 
-export const dynamic = "force-dynamic";
+// NOTE: Property data is served by the backend API (separate repo). This page
+// renders the UI shell with placeholder content until the API is wired up
+// (e.g. fetch from `${process.env.NEXT_PUBLIC_API_URL}/properties/<id>`).
 
 interface PropertyDetailsPageProps {
   params: Promise<{
@@ -18,30 +16,13 @@ interface PropertyDetailsPageProps {
 
 export async function generateMetadata({ params }: PropertyDetailsPageProps): Promise<Metadata> {
   const { id } = await params;
-  const property = await prisma.property.findUnique({
-    where: { id },
-    select: { title: true, description: true, price: true, location: { select: { name: true } } },
-  });
-
-  if (!property) return { title: "Property Not Found" };
-
-  const price = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(Number(property.price));
-  const image = getPropertyImage(id);
-
   return {
-    title: property.title,
-    description: `${property.description?.slice(0, 155) ?? property.title} — ${price}/year in ${property.location.name}.`,
+    title: "Property Details",
+    description: "View property details on RentalHub Nigeria.",
     openGraph: {
-      title: `${property.title} | RentalHub`,
-      description: `${property.description?.slice(0, 155) ?? property.title} — ${price}/year in ${property.location.name}.`,
+      title: "Property Details | RentalHub",
+      description: "View property details on RentalHub Nigeria.",
       url: `https://rentalhub.ng/properties/${id}`,
-      images: [{ url: image, width: 800, height: 400, alt: property.title }],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: property.title,
-      description: `${price}/year in ${property.location.name}.`,
-      images: [image],
     },
   };
 }
@@ -49,57 +30,19 @@ export async function generateMetadata({ params }: PropertyDetailsPageProps): Pr
 export default async function PropertyDetailsPage({ params }: PropertyDetailsPageProps) {
   const { id } = await params;
 
-  const property = await prisma.property.findUnique({
-    where: { id },
-    include: {
-      location: true,
-      landlord: {
-        select: {
-          name: true,
-          verificationStatus: true,
-        },
-      },
-    },
-    // vacantUnits is a scalar field — included automatically
-  });
-
-  if (!property || property.status !== "APPROVED") {
-    notFound();
-  }
-
-  const session = await getServerSession(authOptions);
-  const userRole = session?.user?.role ?? null;
-
-  let existingBookingStatus: "PENDING" | "CONFIRMED" | "AWAITING_PAYMENT" | "PAID" | null = null;
-  if (userRole === "STUDENT" && session?.user?.id) {
-    const existing = await prisma.booking.findFirst({
-      where: {
-        studentId: session.user.id,
-        propertyId: property.id,
-        status: { in: ["PENDING", "CONFIRMED", "AWAITING_PAYMENT", "PAID"] },
-      },
-      select: { status: true },
-      orderBy: { createdAt: "desc" },
-    });
-    existingBookingStatus = (existing?.status ?? null) as typeof existingBookingStatus;
-  }
-
-  const amenities = Array.isArray(property.amenities) ? property.amenities : [];
-  const rawImages = Array.isArray(property.images) ? property.images : [];
-  const imageUrls = rawImages.flatMap((imageItem) => {
-    if (typeof imageItem === "string") {
-      return [imageItem];
-    }
-    if (
-      typeof imageItem === "object" &&
-      imageItem !== null &&
-      "url" in imageItem &&
-      typeof (imageItem as { url: unknown }).url === "string"
-    ) {
-      return [(imageItem as { url: string }).url];
-    }
-    return [];
-  });
+  // Placeholder content — replace with a call to the backend API.
+  const property = {
+    id,
+    title: "Property details unavailable",
+    description:
+      "Property information is served by the backend API, which lives in a separate repository. Connect the API to display live listing details here.",
+    price: 0,
+    location: { name: "—" },
+    landlord: { name: "—", verificationStatus: "UNVERIFIED" as const },
+    vacantUnits: 0,
+  };
+  const amenities: string[] = [];
+  const imageUrls: string[] = [];
 
   return (
     <div className="min-h-screen bg-gray-50 py-10 px-4 sm:px-6 lg:px-8">
@@ -155,8 +98,8 @@ export default async function PropertyDetailsPage({ params }: PropertyDetailsPag
           <BookButton
             propertyId={property.id}
             propertyPrice={Number(property.price)}
-            existingBookingStatus={existingBookingStatus}
-            userRole={userRole}
+            existingBookingStatus={null}
+            userRole={null}
             isFullyBooked={property.vacantUnits <= 0}
           />
         </div>

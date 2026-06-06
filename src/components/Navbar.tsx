@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth-stub";
 import { Search, MessageSquare, HelpCircle, Plus } from "lucide-react";
 import NotificationBell from "@/components/NotificationBell";
 

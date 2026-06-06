@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { PropertyWithRelations } from "@/actions/property.actions";
+import { PropertyWithRelations } from "@/types";
 
 interface PropertyCardProps {
   property: PropertyWithRelations;

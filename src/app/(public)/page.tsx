@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import prisma from "@/lib/prisma";
 import FAQAccordion from "@/components/FAQAccordion";
 import FloatingCTA from "@/components/FloatingCTA";
 import HeroSlideshow from "@/components/HeroSlideshow";
@@ -35,90 +34,25 @@ import {
   Users,
 } from "lucide-react";
 
-// ── Image helper ──────────────────────────────────────────────
+// ── Data fetching ─────────────────────────────────────────────
+// Listings are served by the backend API (separate repo). Until that is
+// wired up, the homepage renders with no featured listings / slideshow.
 
-/**
- * Returns the first uploaded image URL from a property's images JSON field.
- * Only returns images that were actually uploaded — never falls back to
- * placeholder / stock images. Returns null if no uploaded image exists.
- */
-function getFirstUploadedImage(images: unknown): string | null {
-  if (!Array.isArray(images)) return null;
-  for (const item of images) {
-    if (typeof item === "string" && item.startsWith("http")) return item;
-    if (
-      typeof item === "object" &&
-      item !== null &&
-      "url" in item &&
-      typeof (item as { url: unknown }).url === "string"
-    ) {
-      const typed = item as { url: string; type?: string };
-      if (!typed.type || typed.type === "image") return typed.url;
-    }
-  }
-  return null;
+interface FeaturedProperty {
+  id: string;
+  title: string;
+  price: number;
+  distanceToCampus: number | null;
+  amenities: string[];
+  location: string;
+  image: string | null;
 }
 
-// ── Data fetching ─────────────────────────────────────────────
-
-async function getPageData() {
-  try {
-    const [propertyCount, locationCount, featured, slideshowCandidates] = await Promise.all([
-      prisma.property.count({ where: { status: "APPROVED" } }),
-      prisma.location.count(),
-      prisma.property.findMany({
-        where: { status: "APPROVED" },
-        select: {
-          id: true,
-          title: true,
-          price: true,
-          distanceToCampus: true,
-          amenities: true,
-          images: true,
-          location: { select: { name: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 4,
-      }),
-      // Fetch more properties to populate the hero slideshow
-      prisma.property.findMany({
-        where: { status: "APPROVED" },
-        select: { id: true, title: true, images: true },
-        orderBy: { createdAt: "desc" },
-        take: 20,
-      }),
-    ]);
-
-    // Collect up to 8 distinct uploaded images for the slideshow
-    const slideImages: { src: string; alt: string }[] = [];
-    for (const p of slideshowCandidates) {
-      const img = getFirstUploadedImage(p.images);
-      if (img) {
-        slideImages.push({ src: img, alt: p.title });
-        if (slideImages.length >= 8) break;
-      }
-    }
-
-    return {
-      stats: { propertyCount, locationCount },
-      slideImages,
-      featured: featured.map((p) => ({
-        id: p.id,
-        title: p.title,
-        price: Number(p.price),
-        distanceToCampus: p.distanceToCampus ? Number(p.distanceToCampus) : null,
-        amenities: Array.isArray(p.amenities) ? (p.amenities as string[]) : [],
-        location: p.location.name,
-        image: getFirstUploadedImage(p.images),
-      })),
-    };
-  } catch {
-    return {
-      stats: { propertyCount: 0, locationCount: 8 },
-      slideImages: [],
-      featured: [],
-    };
-  }
+async function getPageData(): Promise<{
+  featured: FeaturedProperty[];
+  slideImages: { src: string; alt: string }[];
+}> {
+  return { featured: [], slideImages: [] };
 }
 
 // ── Amenity icon ──────────────────────────────────────────────

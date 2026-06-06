@@ -1,19 +1,8 @@
 import type { MetadataRoute } from "next";
-import prisma from "@/lib/prisma";
 
-export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const properties = await prisma.property.findMany({
-    where: { status: "APPROVED" },
-    select: { id: true, updatedAt: true },
-  });
-
-  const propertyUrls: MetadataRoute.Sitemap = properties.map((p) => ({
-    url: `https://rentalhub.ng/properties/${p.id}`,
-    lastModified: p.updatedAt,
-    changeFrequency: "weekly",
-    priority: 0.8,
-  }));
-
+// Dynamic property URLs come from the backend API (separate repo). This
+// sitemap lists the static public routes only until the API is wired up.
+export default function sitemap(): MetadataRoute.Sitemap {
   return [
     {
       url: "https://rentalhub.ng",
@@ -27,6 +16,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "daily",
       priority: 0.9,
     },
-    ...propertyUrls,
   ];
 }

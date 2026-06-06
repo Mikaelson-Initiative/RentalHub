@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
-import { getServerSession } from "next-auth";
-import prisma from "@/lib/prisma";
-import { authOptions } from "@/lib/auth";
+
+// NOTE: Landlord listing data is served by the backend API (separate repo).
+// This page renders the UI shell with placeholder content until the API is wired up.
 
 interface LandlordPropertyDetailsPageProps {
   params: Promise<{
@@ -42,54 +41,33 @@ const safeHttpUrl = (url: string | undefined): string | undefined => {
 };
 
 export default async function LandlordPropertyDetailsPage({ params }: LandlordPropertyDetailsPageProps) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    redirect("/login");
-  }
-  if (session.user.role !== "LANDLORD") {
-    redirect("/landlord");
-  }
+  await params; // route param available for future backend wiring
 
-  const { id } = await params;
+  // Placeholder content — replace with a call to the backend API.
+  const property = {
+    title: "Listing details unavailable",
+    status: "PENDING" as "PENDING" | "APPROVED" | "REJECTED",
+    location: { name: "—" },
+    price: 0,
+    distanceToCampus: null as number | null,
+    _count: { bookings: 0 },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    reviewedAt: null as string | null,
+    reviewNote: null as string | null,
+    reviewedBy: null as { name: string; email: string } | null,
+    description:
+      "Listing details are served by the backend API, which lives in a separate repository.",
+    bookings: [] as {
+      id: string;
+      status: string;
+      createdAt: string;
+      student: { name: string; email: string };
+    }[],
+  };
 
-  const property = await prisma.property.findFirst({
-    where: {
-      id,
-      landlordId: session.user.id,
-    },
-    include: {
-      location: true,
-      reviewedBy: {
-        select: {
-          name: true,
-          email: true,
-        },
-      },
-      bookings: {
-        include: {
-          student: {
-            select: {
-              name: true,
-              email: true,
-            },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-      },
-      _count: {
-        select: {
-          bookings: true,
-        },
-      },
-    },
-  });
-
-  if (!property) {
-    notFound();
-  }
-
-  const amenities = Array.isArray(property.amenities) ? property.amenities : [];
-  const rawImages = Array.isArray(property.images) ? property.images : [];
+  const amenities: unknown[] = [];
+  const rawImages: unknown[] = [];
 
   const mediaItems: MediaItem[] = rawImages.map((item, index) => {
     if (typeof item === "string") {

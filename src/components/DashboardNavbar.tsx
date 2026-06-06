@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useSession, signOut } from "next-auth/react";
+import { useSession, signOut } from "@/lib/auth-stub";
 import { Search, LogOut, User } from "lucide-react";
 import { useState } from "react";
 import NotificationBell from "@/components/NotificationBell";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth-stub";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, Camera, Save, User, Mail, Phone, BookOpen } from "lucide-react";
