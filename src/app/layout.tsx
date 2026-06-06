@@ -28,6 +28,9 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "https://rentalhub.ng",
   },
+  verification: {
+    google: "CyGGGZptjbYyyiMNb0mi9frcF1QKDTWZm2rYwfNXD_o",
+  },
   icons: {
     icon: [{ url: "/icon.png", type: "image/png" }],
     shortcut: [{ url: "/icon.png" }],
