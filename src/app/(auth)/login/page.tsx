@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
-import { signIn, signOut } from "next-auth/react";
+import { signIn, signOut } from "@/lib/auth-stub";
 import { useRouter, useSearchParams } from "next/navigation";
 
 function LoginPageContent() {

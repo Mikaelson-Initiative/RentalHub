@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
-import { getServerSession } from "next-auth";
-import prisma from "@/lib/prisma";
-import { authOptions } from "@/lib/auth";
 import ReviewActions from "./ReviewActions";
+
+// NOTE: Admin review data is served by the backend API (separate repo).
+// This page renders the UI shell with placeholder content until the API is wired up.
 
 interface AdminPropertyReviewPageProps {
   params: Promise<{
@@ -43,47 +42,28 @@ const safeHttpUrl = (url: string | undefined): string | undefined => {
 };
 
 export default async function AdminPropertyReviewPage({ params }: AdminPropertyReviewPageProps) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    redirect("/login");
-  }
-  if (session.user.role !== "ADMIN") {
-    redirect("/admin");
-  }
-
   const { id } = await params;
 
-  const property = await prisma.property.findUnique({
-    where: { id },
-    include: {
-      location: true,
-      landlord: {
-        select: {
-          name: true,
-          email: true,
-          verificationStatus: true,
-        },
-      },
-      reviewedBy: {
-        select: {
-          name: true,
-          email: true,
-        },
-      },
-      _count: {
-        select: {
-          bookings: true,
-        },
-      },
-    },
-  });
+  // Placeholder content — replace with a call to the backend API.
+  const property = {
+    id,
+    title: "Listing details unavailable",
+    status: "PENDING" as "PENDING" | "APPROVED" | "REJECTED",
+    location: { name: "—" },
+    price: 0,
+    distanceToCampus: null as number | null,
+    _count: { bookings: 0 },
+    landlord: { name: "—", email: "—", verificationStatus: "UNVERIFIED" as const },
+    createdAt: new Date().toISOString(),
+    description:
+      "Listing details are served by the backend API, which lives in a separate repository.",
+    reviewedAt: null as string | null,
+    reviewedBy: null as { name: string; email: string } | null,
+    reviewNote: null as string | null,
+  };
 
-  if (!property) {
-    notFound();
-  }
-
-  const amenities = Array.isArray(property.amenities) ? property.amenities : [];
-  const rawImages = Array.isArray(property.images) ? property.images : [];
+  const amenities: unknown[] = [];
+  const rawImages: unknown[] = [];
 
   const mediaItems: MediaItem[] = rawImages.map((item, index) => {
     if (typeof item === "string") {

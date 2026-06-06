@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import prisma from "@/lib/prisma";
-import { SCHOOL_LOCATION_KEYWORDS } from "@/lib/schools";
 import { Building2 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -31,36 +29,19 @@ export default async function PropertiesPage({ searchParams }: PropertiesPagePro
   const schoolFilter = resolvedSearchParams?.school?.trim() || "";
   const locationFilter = resolvedSearchParams?.location?.trim() || "";
   const activeFilter = schoolFilter || locationFilter;
-  const selectedKeywords = schoolFilter ? SCHOOL_LOCATION_KEYWORDS[schoolFilter] ?? [schoolFilter] : [locationFilter];
-  const locationNameFilters = selectedKeywords
-    .map((keyword) => keyword.trim())
-    .filter((keyword): keyword is string => Boolean(keyword));
 
-  const properties = await prisma.property.findMany({
-    where: {
-      status: "APPROVED",
-      ...(activeFilter && {
-        location: {
-          OR: locationNameFilters.map((keyword) => ({
-            name: {
-              contains: keyword,
-              mode: "insensitive" as const,
-            },
-          })),
-        },
-      }),
-    },
-    include: {
-      location: true,
-      landlord: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  // Listings are served by the backend API (separate repo). Until that is
+  // wired up, this page renders the filter UI with no results.
+  interface PropertyListItem {
+    id: string;
+    title: string;
+    description: string;
+    price: number;
+    vacantUnits: number;
+    images: unknown;
+    location: { name: string };
+  }
+  const properties: PropertyListItem[] = [];
 
   /** Extract the first uploaded image URL from a property's images JSON field */
   function getFirstUploadedImage(images: unknown): string | null {

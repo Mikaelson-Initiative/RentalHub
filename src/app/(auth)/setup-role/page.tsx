@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth-stub";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Building2, GraduationCap, ArrowRight, Loader2 } from "lucide-react";

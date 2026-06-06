@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth-stub";
 import {
   ShieldCheck, Upload, User, Home, FileText,
   CheckCircle, AlertCircle, ChevronRight, ChevronLeft, Loader2,

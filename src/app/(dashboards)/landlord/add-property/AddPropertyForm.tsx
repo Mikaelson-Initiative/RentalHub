@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useForm, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth-stub";
 import { upload } from "@vercel/blob/client";
 import { 
   ChevronLeft, 
