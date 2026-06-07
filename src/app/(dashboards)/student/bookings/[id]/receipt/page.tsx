@@ -1,208 +1,69 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft, Printer } from "lucide-react";
-
-interface ReceiptBooking {
-  id: string;
-  status: string;
-  paidAt: string | null;
-  amount: number | null;
-  agencyFee: number | null;
-  cautionFee: number | null;
-  moveInDate: string | null;
-  leaseEndDate: string | null;
-  property: {
-    id: string;
-    title: string;
-    location: { name: string };
-    landlord: { name: string; email: string; phoneNumber: string | null };
-  };
-  student: {
-    name: string;
-    email: string;
-  };
-  payments: {
-    paystackRef: string;
-    amount: number;
-    channel: string | null;
-    paidAt: string | null;
-  }[];
-}
+import { T, naira, I, Logo } from "@/lib/rh/theme";
+import { bookingById, listingById, landlordById } from "@/lib/rh/data";
+import { useApp, useViewport } from "@/components/rh/app";
+import { Button, Card } from "@/components/rh/ui";
+import { TaskBar } from "@/components/rh/task-bar";
 
 export default function ReceiptPage() {
+  const { go } = useApp();
+  const { mobile } = useViewport();
   const { id } = useParams<{ id: string }>();
-  const [booking, setBooking] = useState<ReceiptBooking | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await fetch(`/api/bookings/${id}`, { cache: "no-store" });
-        const data = await res.json();
-        if (!res.ok || !data.success) throw new Error(data.error || "Booking not found.");
-        setBooking(data.data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load receipt.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    load();
-  }, [id]);
-
-  const formatPrice = (v: number | null | undefined) =>
-    v === null || v === undefined ? "—" : new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(Number(v));
-
-  const formatDate = (d: string | null | undefined) =>
-    d ? new Date(d).toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" }) : "—";
-
-  if (isLoading) return <div className="text-center py-16 text-gray-500">Loading receipt...</div>;
-  if (error || !booking) return (
-    <div className="text-center py-16">
-      <p className="text-red-500 mb-4">{error || "Receipt not available."}</p>
-      <Link href="/student?tab=bookings" className="text-[#192F59] hover:underline">← Back to bookings</Link>
-    </div>
-  );
-
-  const totalPaid = Number(booking.amount ?? 0) + Number(booking.agencyFee ?? 0) + Number(booking.cautionFee ?? 0);
-  const primaryRef = booking.payments[0]?.paystackRef ?? "—";
+  const bk = bookingById(id);
+  const l = listingById(bk.listingId)!;
+  const lord = landlordById(l.landlord);
+  const total = (bk.bid || l.price) + (bk.agencyFee || 0) + (bk.cautionFee || 0);
+  const ref = "RH-" + bk.id.toUpperCase() + "-8F3K2A";
+  const rows: [string, number][] = [["Annual rent", bk.bid || l.price], ["Agency fee", bk.agencyFee || 0], ["Caution fee", bk.cautionFee || 0]];
 
   return (
-    <div className="max-w-2xl mx-auto">
-      {/* Screen actions — hidden on print */}
-      <div className="mb-6 flex items-center justify-between print:hidden">
-        <Link href="/student?tab=bookings" className="flex items-center gap-2 text-gray-500 hover:text-gray-700 text-sm">
-          <ArrowLeft className="w-4 h-4" /> Back to Bookings
-        </Link>
-        <button
-          onClick={() => window.print()}
-          className="flex items-center gap-2 bg-[#192F59] hover:bg-[#14264a] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-        >
-          <Printer className="w-4 h-4" /> Print Receipt
-        </button>
-      </div>
-
-      {/* Receipt card */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden" id="receipt">
-        {/* Header */}
-        <div className="bg-[#192F59] text-white px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold">RentalHub</h1>
-              <p className="text-blue-200 text-sm mt-0.5">Student Housing Platform</p>
-            </div>
-            <div className="text-right">
-              <p className="text-blue-200 text-xs uppercase tracking-wide">Receipt</p>
-              <p className="text-white font-mono text-sm mt-0.5">{primaryRef}</p>
-            </div>
-          </div>
+    <div style={{ background: T.paper, minHeight: "100vh" }}>
+      <TaskBar />
+      <div style={{ maxWidth: 640, margin: "0 auto", padding: mobile ? "20px" : "32px 24px 56px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+          <span style={{ fontFamily: T.sans, fontSize: 13.5, color: T.ink2 }}>Official payment receipt</span>
+          <Button variant="dark" size="sm" icon={I.doc} onClick={() => window.print()}>Print / Save PDF</Button>
         </div>
-
-        {/* Status banner */}
-        <div className="bg-green-50 border-b border-green-200 px-8 py-3 flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-green-500" />
-          <span className="text-green-800 text-sm font-medium">Payment Confirmed</span>
-          <span className="ml-auto text-green-600 text-xs">{formatDate(booking.paidAt)}</span>
-        </div>
-
-        <div className="px-8 py-6 space-y-6">
-          {/* Property + parties */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div>
-              <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">Tenant</p>
-              <p className="font-semibold text-navy">{booking.student.name}</p>
-              <p className="text-sm text-gray-500">{booking.student.email}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">Landlord</p>
-              <p className="font-semibold text-navy">{booking.property.landlord.name}</p>
-              <p className="text-sm text-gray-500">{booking.property.landlord.email}</p>
-              {booking.property.landlord.phoneNumber && (
-                <p className="text-sm text-gray-500">{booking.property.landlord.phoneNumber}</p>
-              )}
-            </div>
+        <Card pad={0} style={{ overflow: "hidden" }}>
+          <div style={{ background: T.ink, color: T.paper, padding: mobile ? "20px" : "24px 28px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <Logo ink={T.paper} color={T.clay} fontSize={20} size={24} />
+            <div style={{ textAlign: "right" }}><div style={{ fontFamily: T.sans, fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", color: "rgba(244,238,228,.55)" }}>Receipt</div><div style={{ fontFamily: "monospace", fontSize: 13, color: "#fff", marginTop: 2 }}>{ref}</div></div>
           </div>
-
-          <hr className="border-gray-100" />
-
-          {/* Property details */}
-          <div>
-            <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">Property</p>
-            <p className="font-semibold text-navy text-lg">{booking.property.title}</p>
-            <p className="text-sm text-gray-500">{booking.property.location.name}</p>
+          <div style={{ background: T.greenSoft, borderBottom: "1px solid " + T.green + "22", padding: "12px 28px", display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 999, background: T.green }} /><span style={{ fontFamily: T.sans, fontSize: 13.5, fontWeight: 600, color: T.green }}>Payment confirmed</span>
+            <span style={{ marginLeft: "auto", fontFamily: T.sans, fontSize: 12.5, color: T.green }}>{bk.paidAt || "14 May 2026"}</span>
           </div>
-
-          {/* Tenancy dates */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Move-in Date</p>
-              <p className="text-sm font-medium text-gray-700">{formatDate(booking.moveInDate)}</p>
+          <div style={{ padding: mobile ? "22px" : "28px", display: "flex", flexDirection: "column", gap: 22 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+              <div><div style={{ fontFamily: T.sans, fontSize: 11, color: T.ink3, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 6 }}>Tenant</div><div style={{ fontFamily: T.sans, fontSize: 14.5, fontWeight: 600, color: T.ink }}>Chioma Eze</div><div style={{ fontFamily: T.sans, fontSize: 12.5, color: T.ink2 }}>chioma.eze@email.com</div></div>
+              <div><div style={{ fontFamily: T.sans, fontSize: 11, color: T.ink3, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 6 }}>Landlord</div><div style={{ fontFamily: T.sans, fontSize: 14.5, fontWeight: 600, color: T.ink }}>{lord.name}</div><div style={{ fontFamily: T.sans, fontSize: 12.5, color: T.ink2 }}>{lord.phone}</div></div>
             </div>
-            <div>
-              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Lease End Date</p>
-              <p className="text-sm font-medium text-gray-700">{formatDate(booking.leaseEndDate)}</p>
+            <div style={{ borderTop: "1px solid " + T.line2, paddingTop: 18 }}>
+              <div style={{ fontFamily: T.sans, fontSize: 11, color: T.ink3, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 6 }}>Property</div>
+              <div style={{ fontFamily: T.serif, fontSize: 20, color: T.ink }}>{l.title}</div>
+              <div style={{ fontFamily: T.sans, fontSize: 13, color: T.ink2 }}>{l.area}, Ikere-Ekiti</div>
             </div>
-          </div>
-
-          <hr className="border-gray-100" />
-
-          {/* Payment breakdown */}
-          <div>
-            <p className="text-xs text-gray-400 uppercase tracking-wide mb-3">Payment Breakdown</p>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Annual Rent</span>
-                <span className="font-medium">{formatPrice(booking.amount)}</span>
-              </div>
-              {booking.agencyFee ? (
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Agency Fee</span>
-                  <span className="font-medium">{formatPrice(booking.agencyFee)}</span>
-                </div>
-              ) : null}
-              {booking.cautionFee ? (
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Caution Fee</span>
-                  <span className="font-medium">{formatPrice(booking.cautionFee)}</span>
-                </div>
-              ) : null}
-              <hr className="border-dashed border-gray-200" />
-              <div className="flex justify-between text-base font-bold">
-                <span className="text-navy">Total Paid</span>
-                <span className="text-green-700">{formatPrice(totalPaid)}</span>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div><div style={{ fontFamily: T.sans, fontSize: 11, color: T.ink3, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 4 }}>Move-in</div><div style={{ fontFamily: T.sans, fontSize: 14, color: T.ink, fontWeight: 500 }}>{bk.moveInDate || "1 June 2026"}</div></div>
+              <div><div style={{ fontFamily: T.sans, fontSize: 11, color: T.ink3, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 4 }}>Lease end</div><div style={{ fontFamily: T.sans, fontSize: 14, color: T.ink, fontWeight: 500 }}>{bk.leaseEndDate || "31 May 2027"}</div></div>
+            </div>
+            <div style={{ borderTop: "1px solid " + T.line2, paddingTop: 18 }}>
+              <div style={{ fontFamily: T.sans, fontSize: 11, color: T.ink3, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 12 }}>Payment breakdown</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                {rows.filter((r) => r[1]).map(([t, v]) => <div key={t} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontFamily: T.sans, fontSize: 14, color: T.ink2 }}><span style={{ whiteSpace: "nowrap" }}>{t}</span><span style={{ color: T.ink, fontWeight: 500, whiteSpace: "nowrap" }}>{naira(v)}</span></div>)}
+                <div style={{ borderTop: "1px dashed " + T.line, marginTop: 4, paddingTop: 12, display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}><span style={{ fontFamily: T.sans, fontSize: 14, fontWeight: 700, color: T.ink, whiteSpace: "nowrap" }}>Total paid</span><span style={{ fontFamily: T.serif, fontSize: 24, fontWeight: 700, color: T.green, whiteSpace: "nowrap" }}>{naira(total)}</span></div>
               </div>
             </div>
-          </div>
-
-          {/* Payment method */}
-          {booking.payments.length > 0 && (
-            <div className="bg-gray-50 rounded-xl p-4 text-sm">
-              <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">Payment Details</p>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <p className="text-gray-500 text-xs">Reference</p>
-                  <p className="font-mono text-gray-700 text-xs mt-0.5">{primaryRef}</p>
-                </div>
-                {booking.payments[0]?.channel && (
-                  <div>
-                    <p className="text-gray-500 text-xs">Method</p>
-                    <p className="text-gray-700 capitalize text-xs mt-0.5">{booking.payments[0].channel}</p>
-                  </div>
-                )}
-              </div>
+            <div style={{ background: T.paper2, borderRadius: 12, padding: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div><div style={{ fontFamily: T.sans, fontSize: 11, color: T.ink3 }}>Reference</div><div style={{ fontFamily: "monospace", fontSize: 12.5, color: T.ink, marginTop: 2 }}>{ref}</div></div>
+              <div><div style={{ fontFamily: T.sans, fontSize: 11, color: T.ink3 }}>Method</div><div style={{ fontFamily: T.sans, fontSize: 12.5, color: T.ink, marginTop: 2 }}>Card · Paystack</div></div>
             </div>
-          )}
-
-          {/* Footer */}
-          <div className="text-center text-xs text-gray-400 pt-2">
-            <p>This is an official payment receipt from RentalHub.</p>
-            <p className="mt-0.5">Booking ID: {booking.id}</p>
+            <div style={{ textAlign: "center", fontFamily: T.sans, fontSize: 11.5, color: T.ink3 }}>This is an official payment receipt from RentalHub · a product of Mikaelson Initiative.</div>
           </div>
-        </div>
+        </Card>
+        <div style={{ textAlign: "center", marginTop: 18 }}><span onClick={() => go("student")} style={{ fontFamily: T.sans, fontSize: 13.5, color: T.clay, fontWeight: 600, cursor: "pointer" }}>← Back to my bookings</span></div>
       </div>
     </div>
   );

@@ -59,19 +59,26 @@ export const LISTINGS: Listing[] = [
 export function listingById(id: string) { return LISTINGS.find((l) => l.id === id); }
 export function landlordById(id: string) { return LANDLORDS[id]; }
 
-export const STUDENT_BOOKINGS = [
+export interface DemoBooking {
+  id: string; listingId: string; status: string; bid?: number; agencyFee?: number; cautionFee?: number;
+  createdAt: string; expiresAt?: string; paidAt?: string; moveInDate?: string; leaseEndDate?: string;
+  movedIn?: boolean; payoutStatus?: string; agreementSigned?: boolean; agreementName?: string;
+}
+export const STUDENT_BOOKINGS: DemoBooking[] = [
   { id: "bk1", listingId: "olumilua-2b", status: "AWAITING_PAYMENT", bid: 310000, agencyFee: 31000, cautionFee: 50000, createdAt: "2026-05-28", expiresAt: "2026-06-08T18:00:00", agreementSigned: false },
   { id: "bk2", listingId: "ikoyi-studio", status: "PAID", bid: 150000, agencyFee: 0, cautionFee: 30000, createdAt: "2026-05-12", paidAt: "2026-05-14", moveInDate: "2026-06-01", leaseEndDate: "2027-05-31", movedIn: false, payoutStatus: "PENDING", agreementSigned: true, agreementName: "Chioma Eze" },
   { id: "bk3", listingId: "uro-sc", status: "PENDING", bid: 175000, createdAt: "2026-06-02" },
   { id: "bk4", listingId: "afao-room", status: "CONFIRMED", bid: 60000, createdAt: "2026-05-30" },
-] as const;
+];
+export function bookingById(id: string): DemoBooking { return STUDENT_BOOKINGS.find((b) => b.id === id) || STUDENT_BOOKINGS[0]; }
 
-export const LANDLORD_REQUESTS = [
+export interface DemoRequest { id: string; listingId: string; student: string; bid: number; status: string; createdAt: string; otherBids?: number }
+export const LANDLORD_REQUESTS: DemoRequest[] = [
   { id: "rq1", listingId: "uro-sc", student: "Chioma Eze", bid: 175000, status: "PENDING", createdAt: "2026-06-02", otherBids: 2 },
   { id: "rq2", listingId: "uro-sc", student: "Tunde Bakare", bid: 180000, status: "PENDING", createdAt: "2026-06-01", otherBids: 2 },
   { id: "rq3", listingId: "odooja-rp", student: "Ibrahim Sani", bid: 220000, status: "AWAITING_PAYMENT", createdAt: "2026-05-29" },
   { id: "rq4", listingId: "uro-room", student: "Grace Okafor", bid: 75000, status: "PAID", createdAt: "2026-05-10" },
-] as const;
+];
 
 export const LANDLORD_EARNINGS = {
   total: 405000, monthly: 150000, paidCount: 3,
@@ -89,20 +96,21 @@ export const ADMIN_PENDING = [
   { id: "pp2", title: "2-Bedroom Flat, Estate", landlord: "Funke Akinwale", area: "Olumilua Estate", price: 340000, media: 12, submitted: "2026-06-03", aiScore: "REVIEW", aiNote: "Price 18% above area median — verify finishing." },
   { id: "pp3", title: "Budget Room", landlord: "Bisi Talabi", area: "Afao Road", price: 55000, media: 4, submitted: "2026-06-03", aiScore: "PASS", aiNote: "Looks consistent. Few photos — consider requesting more." },
   { id: "pp4", title: "Shared Apartment", landlord: "Yusuf Bello", area: "Uro", price: 95000, media: 6, submitted: "2026-06-02", aiScore: "FAIL", aiNote: "Stock-looking images detected — request original photos." },
-] as const;
+];
+export function pendingById(id: string) { return ADMIN_PENDING.find((p) => p.id === id) || ADMIN_PENDING[0]; }
 
 export const ADMIN_VERIFICATIONS = [
   { id: "v1", name: "Yusuf Bello", email: "yusuf.bello@gmail.com", status: "UNDER_REVIEW", aiScore: "PASS", aiNote: "ID and selfie match. Ownership document legible.", submitted: "2026-06-04", docs: { id: true, selfie: true, ownership: true } },
   { id: "v2", name: "Ngozi Eze", email: "ngozi.eze@yahoo.com", status: "UNDER_REVIEW", aiScore: "REVIEW", aiNote: "Selfie slightly blurred — confirm match manually.", submitted: "2026-06-03", docs: { id: true, selfie: true, ownership: true } },
   { id: "v3", name: "Musa Danladi", email: "musa.d@gmail.com", status: "REJECTED", aiScore: "FAIL", aiNote: "Ownership proof did not match the listed address.", submitted: "2026-05-30", docs: { id: true, selfie: true, ownership: false } },
   { id: "v4", name: "Kemi Adeyemi", email: "kemi.adeyemi@gmail.com", status: "UNDER_REVIEW", aiScore: "PASS", aiNote: "All documents clear and matching.", submitted: "2026-06-05", docs: { id: true, selfie: true, ownership: true } },
-] as const;
+];
 
 export const ADMIN_PAYOUTS = [
   { id: "po1", listingId: "ikoyi-studio", student: "Chioma Eze", landlord: "Chidi Nwankwo", amount: 150000, agencyFee: 0, cautionFee: 30000, movedIn: "2026-06-01", bank: "GTBank", acct: "0123456789", acctName: "Chidi Nwankwo" },
   { id: "po2", listingId: "uro-room", student: "Grace Okafor", landlord: "Adebayo Ogunleye", amount: 75000, agencyFee: 0, cautionFee: 15000, movedIn: "2026-05-20", bank: "Access Bank", acct: "0987654321", acctName: "Adebayo Ogunleye" },
   { id: "po3", listingId: "odooja-studio", student: "Halima Yusuf", landlord: "Bisi Talabi", amount: 130000, agencyFee: 13000, cautionFee: 25000, movedIn: "2026-05-18", bank: "UBA", acct: "2233445566", acctName: "Bisi Talabi" },
-] as const;
+];
 
 export const ADMIN_FORECAST = {
   verdict: "Demand rising",

@@ -1,61 +1,15 @@
-export default function PrivacyPage() {
-  return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto bg-white border border-gray-200 rounded-xl p-8 shadow-sm">
-        <h1 className="text-3xl font-bold text-[#192F59]">Privacy Policy</h1>
-        <p className="text-gray-600 mt-4">
-          This policy explains how RentalHub collects, uses, stores, and protects personal data for students,
-          landlords, and administrators.
-        </p>
+"use client";
 
-        <div className="mt-6 space-y-5 text-sm text-gray-700">
-          <section>
-            <h2 className="font-semibold text-[#192F59] mb-1">1. Data We Collect</h2>
-            <p>
-              We collect account data (name, email, role), listing data (property details and uploaded media), and
-              booking activity needed to operate the platform.
-            </p>
-          </section>
-          <section>
-            <h2 className="font-semibold text-[#192F59] mb-1">2. How We Use Data</h2>
-            <p>
-              Data is used to authenticate users, moderate listings, support booking workflows, prevent abuse, and improve
-              reliability.
-            </p>
-          </section>
-          <section>
-            <h2 className="font-semibold text-[#192F59] mb-1">3. Data Sharing</h2>
-            <p>
-              We do not sell personal data. We may share limited operational data with infrastructure providers required to
-              host and secure the service.
-            </p>
-          </section>
-          <section>
-            <h2 className="font-semibold text-[#192F59] mb-1">4. Data Retention</h2>
-            <p>
-              We retain account and transaction records while needed for service operations, dispute handling, legal
-              obligations, and security.
-            </p>
-          </section>
-          <section>
-            <h2 className="font-semibold text-[#192F59] mb-1">5. Your Rights</h2>
-            <p>
-              You may request corrections, account deactivation, or data deletion (where legally permitted) by contacting
-              support.
-            </p>
-          </section>
-          <section>
-            <h2 className="font-semibold text-[#192F59] mb-1">6. Contact</h2>
-            <p>
-              Privacy requests can be sent to{" "}
-              <a className="text-[#E67E22] hover:underline" href="mailto:support@rentalhub.ng">
-                support@rentalhub.ng
-              </a>
-              .
-            </p>
-          </section>
-        </div>
-      </div>
-    </div>
-  );
+import { LegalPage } from "@/components/rh/status-page";
+
+export default function PrivacyPage() {
+  return <LegalPage title="Privacy Policy" updated="June 2026" sections={[
+    ["Who we are", ["RentalHub is a verified student-housing platform operated by Mikaelson Initiative. This policy explains what personal information we collect, how we use it, and the choices you have."]],
+    ["Information we collect", ["Account details you provide — name, email, phone number, and school. For landlords, we also collect identity and property-ownership documents needed for verification.", "Usage information such as the listings you view, searches you run, and bookings you make, so we can improve the service and keep it safe."]],
+    ["How we use your information", ["To create and manage your account, verify landlords, process bookings and payments, and keep the platform free of fraud and scams.", "To send you essential service messages — booking updates, payment receipts, and security notices. We do not sell your personal data."]],
+    ["Payments", ["Payments are processed by our payment partner. We hold rent securely in escrow and release it to the landlord only after you confirm move-in. We store payment references, not full card details."]],
+    ["Document verification", ["Landlord identity and ownership documents are reviewed by our admin team and automated checks solely to confirm authenticity. They are stored securely and are never shown to students."]],
+    ["Your rights", ["You can access, correct, or delete your personal information at any time from your profile, or by contacting us. You may also request a copy of the data we hold about you."]],
+    ["Contact", ["For any privacy request, email privacy@rentalhub.ng and we’ll respond within 30 days."]],
+  ]} />;
 }

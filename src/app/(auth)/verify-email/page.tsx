@@ -1,158 +1,47 @@
 "use client";
 
-import Link from "next/link";
+import { Suspense, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useMemo, useState } from "react";
+import { T, I } from "@/lib/rh/theme";
+import { useApp, useViewport } from "@/components/rh/app";
+import { Button } from "@/components/rh/ui";
+import { AuthShell } from "@/components/rh/auth-shell";
 
-function VerifyEmailContent() {
-  const params = useSearchParams();
-
-  const initialEmail = useMemo(() => params.get("email") ?? "", [params]);
-  const [email, setEmail] = useState(initialEmail);
-  const [otp, setOtp] = useState("");
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [resending, setResending] = useState(false);
-  const [isVerified, setIsVerified] = useState(false);
-
-  const onSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    setError("");
-    setSuccess("");
-    setLoading(true);
-
-    try {
-      const response = await fetch("/api/auth/verify-email/confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, otp }),
-      });
-      const payload = await response.json();
-      if (!response.ok || !payload?.success) {
-        throw new Error(payload?.error || "Failed to verify OTP.");
-      }
-      setSuccess(payload.message || "Email verified successfully.");
-      setIsVerified(true);
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Failed to verify OTP.");
-    } finally {
-      setLoading(false);
-    }
+function VerifyInner() {
+  const { go, showToast } = useApp();
+  const { mobile } = useViewport();
+  const sp = useSearchParams();
+  const role = sp.get("role") || "student";
+  const [code, setCode] = useState(["", "", "", "", "", ""]);
+  const refs = useRef<(HTMLInputElement | null)[]>([]);
+  const onChange = (i: number, v: string) => {
+    if (!/^\d?$/.test(v)) return;
+    const next = [...code]; next[i] = v; setCode(next);
+    if (v && i < 5) refs.current[i + 1]?.focus();
   };
-
-  const onResend = async () => {
-    setError("");
-    setSuccess("");
-    setResending(true);
-    try {
-      const response = await fetch("/api/auth/verify-email/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      const payload = await response.json();
-      if (!response.ok || !payload?.success) {
-        throw new Error(payload?.error || "Failed to resend OTP.");
-      }
-      setSuccess(payload.message || "OTP sent.");
-    } catch (resendError) {
-      setError(resendError instanceof Error ? resendError.message : "Failed to resend OTP.");
-    } finally {
-      setResending(false);
-    }
-  };
-
+  const filled = code.every((c) => c);
+  const submit = () => { showToast("Email verified — welcome to RentalHub"); go(role === "landlord" ? "landlord" : role); };
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-md">
-        <h1 className="text-2xl font-bold text-[#192F59]">Verify Your Email</h1>
-        <p className="text-gray-600 mt-2 text-sm">
-          Enter the 6-digit OTP sent to your email address.
-        </p>
-
-        {error && <div className="mt-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>}
-        {success && <div className="mt-4 p-3 rounded-lg bg-green-50 border border-green-200 text-sm text-green-700">{success}</div>}
-
-        <form onSubmit={onSubmit} className="mt-6 space-y-4">
-          <div>
-            <label className="text-sm font-medium text-gray-700" htmlFor="email">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E67E22]"
-              required
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-700" htmlFor="otp">
-              OTP Code
-            </label>
-            <input
-              id="otp"
-              type="text"
-              value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              maxLength={6}
-              className="mt-1 w-full px-4 py-3 border border-gray-300 rounded-lg tracking-[0.4em] text-center text-lg focus:outline-none focus:ring-2 focus:ring-[#E67E22]"
-              required
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading || isVerified}
-            className="w-full bg-[#E67E22] hover:bg-[#D35400] disabled:opacity-50 text-white font-semibold py-3 rounded-lg"
-          >
-            {loading ? "Verifying..." : isVerified ? "Verified" : "Verify Email"}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => void onResend()}
-            disabled={resending || isVerified}
-            className="w-full border border-[#192F59] text-[#192F59] hover:bg-gray-50 disabled:opacity-50 font-semibold py-3 rounded-lg"
-          >
-            {resending ? "Resending..." : "Resend OTP"}
-          </button>
-
-          {isVerified && (
-            <Link
-              href={`/login?email=${encodeURIComponent(email)}`}
-              className="block w-full bg-[#192F59] hover:bg-[#152647] text-white text-center font-semibold py-3 rounded-lg"
-            >
-              Continue to Login
-            </Link>
-          )}
-        </form>
-
-        <p className="mt-6 text-sm text-gray-600 text-center">
-          Back to{" "}
-          <Link href="/login" className="text-[#E67E22] hover:underline">
-            Login
-          </Link>
-        </p>
+    <AuthShell mobile={mobile} title="Verify your email" sub="We sent a 6-digit code to your email. Enter it below to continue.">
+      <div style={{ display: "flex", gap: mobile ? 8 : 11, justifyContent: "space-between" }}>
+        {code.map((c, i) => (
+          <input key={i} ref={(el) => { refs.current[i] = el; }} value={c} inputMode="numeric" maxLength={1}
+            onChange={(e) => onChange(i, e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Backspace" && !code[i] && i > 0) refs.current[i - 1]?.focus(); }}
+            style={{ width: mobile ? 46 : 56, height: mobile ? 56 : 64, textAlign: "center", fontFamily: T.serif, fontSize: 28, fontWeight: 600, color: T.ink, background: "#fff", border: "1.5px solid " + (c ? T.clay : T.line), borderRadius: 13, outline: "none" }} />
+        ))}
       </div>
-    </div>
+      <div style={{ marginTop: 24 }}><Button full size="lg" disabled={!filled} onClick={submit}>Verify & continue</Button></div>
+      <p style={{ fontFamily: T.sans, fontSize: 13.5, color: T.ink2, textAlign: "center", marginTop: 20 }}>
+        Didn&apos;t get it? <span onClick={() => showToast("A new code has been sent")} style={{ color: T.clay, fontWeight: 600, cursor: "pointer" }}>Resend code</span>
+      </p>
+      <div style={{ display: "flex", alignItems: "center", gap: 9, justifyContent: "center", marginTop: 18, fontFamily: T.sans, fontSize: 12.5, color: T.ink3 }}>
+        {I.mail({ width: 15, height: 15 })} Code sent · expires in 10 minutes · try 123456
+      </div>
+    </AuthShell>
   );
 }
 
 export default function VerifyEmailPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-          <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-md">
-            <p className="text-sm text-gray-600">Loading verification form...</p>
-          </div>
-        </div>
-      }
-    >
-      <VerifyEmailContent />
-    </Suspense>
-  );
+  return <Suspense fallback={<div style={{ minHeight: "100vh", background: T.paper }} />}><VerifyInner /></Suspense>;
 }

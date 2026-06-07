@@ -1,5 +1,7 @@
-import AddPropertyForm from "./AddPropertyForm";
+"use client";
+
+import { LandlordDash } from "@/components/rh/landlord-dash";
 
 export default function AddPropertyPage() {
-  return <AddPropertyForm />;
+  return <LandlordDash initial="listings" openAdd />;
 }

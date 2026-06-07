@@ -23,7 +23,7 @@ const ROUTE_MAP: Record<string, (arg?: string | null, params?: Params) => string
   register: () => "/register",
   forgot: () => "/forgot-password",
   reset: () => "/reset-password",
-  verify: () => "/verify-email",
+  verify: (_a, params) => "/verify-email" + (params?.role ? `?role=${encodeURIComponent(params.role)}` : ""),
   "setup-role": () => "/setup-role",
   student: () => "/student",
   "student-profile": () => "/student/profile",
