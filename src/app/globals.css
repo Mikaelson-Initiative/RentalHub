@@ -2,18 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
+/* RentalHub "Editorial House" design tokens (ported from Claude Design). */
 :root {
-  --font-inter: 'Inter', sans-serif;
+  --rh-accent: #C75B2A;
+  --rh-accent-deep: #A8451B;
+  --rh-accent-soft: #F4E2D6;
+  --rh-radius: 18px;
+  --rh-sans: var(--font-hanken), "Hanken Grotesk", system-ui, -apple-system, sans-serif;
+  --rh-serif: var(--font-hanken), "Hanken Grotesk", system-ui, -apple-system, sans-serif;
 }
 
-@layer base {
-  body {
-    font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  }
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #F4EEE4;
+  -webkit-font-smoothing: antialiased;
+  font-family: var(--rh-sans);
 }
+
+input, textarea, select, button { font-family: inherit; }
+::selection { background: #C75B2A; color: #fff; }
+
+/* range track */
+input[type=range] { -webkit-appearance: none; appearance: none; height: 6px; background: #E2D7C4; border-radius: 6px; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #C75B2A; cursor: pointer; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
+
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-thumb { background: rgba(33,29,24,.18); border-radius: 6px; border: 3px solid #F4EEE4; }
 
 @layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
+  .text-balance { text-wrap: balance; }
 }

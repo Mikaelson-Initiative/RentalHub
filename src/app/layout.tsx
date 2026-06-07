@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Hanken_Grotesk } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/Providers";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
+import { AppProvider } from "@/components/rh/app";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const hanken = Hanken_Grotesk({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-hanken" });
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://rentalhub.ng"),
@@ -79,18 +80,16 @@ export default function RootLayout({
   };
 
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={hanken.variable}>
       <head>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
         />
       </head>
-      <body className="font-sans overflow-x-hidden">
+      <body className="overflow-x-hidden">
         <Providers>
-          <div className="min-h-screen flex flex-col">
-            {children}
-          </div>
+          <AppProvider>{children}</AppProvider>
         </Providers>
         <GoogleAnalytics />
       </body>
