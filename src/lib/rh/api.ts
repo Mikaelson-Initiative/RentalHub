@@ -53,6 +53,7 @@ export interface ApiLandlord { id: string; name: string; email?: string; verific
 export interface ApiProperty {
   id: string; title: string; description: string; price: number | string; distanceToCampus?: number | string | null;
   amenities?: unknown; images?: unknown; status?: string; vacantUnits?: number;
+  aiScamFlag?: boolean; aiScamReason?: string | null; createdAt?: string;
   location?: { id: string; name: string } | null; landlord?: ApiLandlord | null;
   _count?: { bookings: number };
 }
@@ -176,3 +177,16 @@ export const getMyListings = () => apiGet<ApiListResponse>("/api/properties?mine
 export const getLandlordRequests = () => apiGet<(ApiBooking & { student?: { name?: string } })[]>("/api/bookings");
 export const setBookingStatus = (id: string, status: "CONFIRMED" | "CANCELLED") => apiPatch(`/api/bookings/${id}`, { status });
 export const getEarnings = () => apiGet<EarningsData>("/api/landlord/earnings");
+
+// ── Admin ─────────────────────────────────────────────────────
+export interface AdminSummary { totalProperties: number; pendingApprovals: number; totalUsers: number; totalBookings: number }
+export interface AdminLandlord { id: string; name: string; email: string; verificationStatus: string; governmentIdUrl?: string | null; selfieUrl?: string | null; ownershipProofUrl?: string | null; aiPreScreenScore?: string | null; aiPreScreenNote?: string | null; _count?: { properties: number } }
+export interface AdminPayout { id: string; amount: number | string; student?: { name?: string }; property?: { title?: string; location?: { name?: string }; landlord?: { name?: string; bankName?: string | null; bankAccountNumber?: string | null; bankAccountName?: string | null } } }
+
+export const getAdminSummary = () => apiGet<AdminSummary>("/api/admin/summary");
+export const getPendingProperties = () => apiGet<ApiListResponse>("/api/properties?status=PENDING&pageSize=50");
+export const setPropertyStatus = (id: string, status: "APPROVED" | "REJECTED", reason?: string) => apiPatch(`/api/properties/${id}/status`, { status, reason });
+export const getAdminLandlords = () => apiGet<AdminLandlord[]>("/api/admin/landlords");
+export const setLandlordVerification = (landlordId: string, action: "APPROVE" | "REJECT", note?: string) => apiPatch("/api/admin/landlords", { landlordId, action, note });
+export const getAdminPayouts = () => apiGet<AdminPayout[]>("/api/admin/payouts");
+export const setPayoutStatus = (bookingId: string, action: "COMPLETE" | "FAIL") => apiPatch("/api/admin/payouts", { bookingId, action });
