@@ -27,6 +27,14 @@ export const apiGet = <T>(path: string) => request<T>(path);
 export const apiPost = <T>(path: string, body?: unknown) => request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined });
 export const apiPut = <T>(path: string, body?: unknown) => request<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined });
 
+// ── Auth (cross-origin-safe: plain JSON POSTs, no session cookie needed) ──
+export const registerUser = (body: { name: string; email: string; password: string; role: string }) =>
+  apiPost("/api/auth/register", body);
+export const verifyEmailOtp = (email: string, otp: string) =>
+  apiPost("/api/auth/verify-email/confirm", { email, otp });
+export const resendOtp = (email: string) =>
+  apiPost("/api/auth/verify-email/send", { email });
+
 // ── Backend property shape (Prisma model, JSON-serialized) ────
 export interface ApiLandlord { id: string; name: string; email?: string; verificationStatus?: string }
 export interface ApiProperty {

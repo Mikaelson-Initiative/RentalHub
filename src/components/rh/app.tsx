@@ -23,7 +23,13 @@ const ROUTE_MAP: Record<string, (arg?: string | null, params?: Params) => string
   register: () => "/register",
   forgot: () => "/forgot-password",
   reset: () => "/reset-password",
-  verify: (_a, params) => "/verify-email" + (params?.role ? `?role=${encodeURIComponent(params.role)}` : ""),
+  verify: (_a, params) => {
+    const qs = new URLSearchParams();
+    if (params?.role) qs.set("role", params.role);
+    if (params?.email) qs.set("email", params.email);
+    const s = qs.toString();
+    return "/verify-email" + (s ? `?${s}` : "");
+  },
   "setup-role": () => "/setup-role",
   student: () => "/student",
   "student-profile": () => "/student/profile",
