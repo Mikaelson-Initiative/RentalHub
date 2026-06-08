@@ -136,11 +136,16 @@ export function SectionHead({ eyebrow, title, action, mobile }: { eyebrow?: stri
 }
 
 // ── Property card ────────────────────────────────────────────
-export function PropertyCard({ l, mobile, onClick }: { l: Listing; mobile?: boolean; onClick?: () => void }) {
+export function PropertyCard({ l, mobile, onClick }: { l: Listing & { image?: string | null }; mobile?: boolean; onClick?: () => void }) {
   return (
     <Card pad={0} hover onClick={onClick} style={{ overflow: "hidden", display: "flex", flexDirection: "column" }}>
       <div style={{ position: "relative", height: mobile ? 168 : 188 }}>
-        <Photo from={l.from} to={l.to} label={l.area} />
+        {l.image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={l.image} alt={l.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        ) : (
+          <Photo from={l.from} to={l.to} label={l.area} />
+        )}
         <span style={{ position: "absolute", top: 12, left: 12 }}>
           <Pill tone="green" icon={I.shield} style={{ background: "rgba(255,255,255,.95)", backdropFilter: "blur(3px)" }}>Verified</Pill>
         </span>

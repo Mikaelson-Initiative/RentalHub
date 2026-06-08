@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { T, naira, I, Photo } from "@/lib/rh/theme";
 import { LISTINGS, AREAS } from "@/lib/rh/data";
 import { useApp, useViewport } from "@/components/rh/app";
 import { Pill, Button, Card, SectionHead, PropertyCard, PublicNav, Footer } from "@/components/rh/ui";
 import { TourVideo } from "@/components/rh/tour-video";
+import { apiGet, mapProperty, type UiListing, type ApiListResponse } from "@/lib/rh/api";
 
 function HeroSearch({ mobile }: { mobile: boolean }) {
   const { go } = useApp();
@@ -22,8 +24,16 @@ function HeroSearch({ mobile }: { mobile: boolean }) {
 export default function HomePage() {
   const { go, campus } = useApp();
   const { mobile } = useViewport();
-  const featured = LISTINGS.filter((l) => l.featured).slice(0, 4);
+  const [featured, setFeatured] = useState<UiListing[]>([]);
   const pad = mobile ? "0 20px" : "0 40px";
+
+  useEffect(() => {
+    let active = true;
+    apiGet<ApiListResponse>("/api/properties?pageSize=4")
+      .then((r) => { if (active) setFeatured(r.items.map(mapProperty)); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   return (
     <div style={{ background: T.paper, minHeight: "100vh" }}>
