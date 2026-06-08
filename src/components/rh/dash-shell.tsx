@@ -23,7 +23,7 @@ export function DashShell({ role, tab, setTab, title, subtitle, action, children
   role: "student" | "landlord" | "admin"; tab: string; setTab: (t: string) => void; title: string; subtitle?: string;
   action?: ReactNode; children: ReactNode; badges?: Record<string, number | undefined>;
 }) {
-  const { go, showToast } = useApp();
+  const { go, showToast, signOut } = useApp();
   const { mobile, tablet } = useViewport();
   const [open, setOpen] = useState(false);
   const cfg = NAVS[role];
@@ -54,7 +54,7 @@ export function DashShell({ role, tab, setTab, title, subtitle, action, children
             <div style={{ fontFamily: T.sans, fontSize: 13.5, fontWeight: 600, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cfg.who.name}</div>
             <div style={{ fontFamily: T.sans, fontSize: 11.5, color: "rgba(244,238,228,.5)" }}>{cfg.label} account</div>
           </div>
-          <span onClick={() => { showToast("Signed out"); go("home"); }} style={{ cursor: "pointer", color: "rgba(244,238,228,.6)" }}>{I.logout({ width: 18, height: 18 })}</span>
+          <span onClick={() => { showToast("Signed out"); signOut(); }} style={{ cursor: "pointer", color: "rgba(244,238,228,.6)" }}>{I.logout({ width: 18, height: 18 })}</span>
         </div>
       </div>
     </div>

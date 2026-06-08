@@ -9,10 +9,22 @@ import type { Listing } from "@/lib/rh/data";
 
 export const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "https://rentalhub-backend-blue.vercel.app").replace(/\/$/, "");
 
+export const AUTH_STORAGE_KEY = "rh_auth";
+
+function authToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try { return JSON.parse(window.localStorage.getItem(AUTH_STORAGE_KEY) || "null")?.token ?? null; } catch { return null; }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = authToken();
   const res = await fetch(`${API_BASE}${path}`, {
     credentials: "include",
-    headers: { Accept: "application/json", ...(init?.body ? { "Content-Type": "application/json" } : {}) },
+    headers: {
+      Accept: "application/json",
+      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     ...init,
   });
   let json: { success?: boolean; data?: unknown; error?: string } | null = null;

@@ -12,6 +12,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { useRouter } from "next/navigation";
 import { T, I } from "@/lib/rh/theme";
 import { CAMPUSES, type Campus } from "@/lib/rh/data";
+import { apiPost, AUTH_STORAGE_KEY } from "@/lib/rh/api";
 
 type Params = Record<string, string> | undefined;
 
@@ -57,9 +58,14 @@ const ROUTE_MAP: Record<string, (arg?: string | null, params?: Params) => string
 
 export type GoFn = (route: string, arg?: string | null, params?: Params) => void;
 
+export interface AuthUser { id: string; name: string; email: string; role: string; verificationStatus?: string; avatarUrl?: string | null }
+
 interface AppValue {
   go: GoFn;
   role: string;
+  user: AuthUser | null;
+  login: (email: string, password: string) => Promise<AuthUser>;
+  signOut: () => void;
   campus: Campus;
   setCampus: (id: string) => void;
   showToast: (msg: string) => void;
@@ -88,10 +94,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [campusId, setCampusId] = useState("bouesti");
   const [toast, setToast] = useState<string | null>(null);
+  const [auth, setAuth] = useState<{ token: string; user: AuthUser } | null>(null);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("rh_campus");
-    if (saved) setCampusId(saved);
+    const savedCampus = window.localStorage.getItem("rh_campus");
+    if (savedCampus) setCampusId(savedCampus);
+    try {
+      const a = JSON.parse(window.localStorage.getItem(AUTH_STORAGE_KEY) || "null");
+      if (a?.token && a?.user) setAuth(a);
+    } catch { /* ignore */ }
   }, []);
 
   const campus = CAMPUSES.find((c) => c.id === campusId) || CAMPUSES[0];
@@ -99,6 +110,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const go = useCallback<GoFn>((route, arg, params) => {
     const fn = ROUTE_MAP[route];
     router.push(fn ? fn(arg, params) : "/" + route);
+  }, [router]);
+
+  const login = useCallback(async (email: string, password: string) => {
+    const data = await apiPost<{ token: string; user: AuthUser }>("/api/auth/token", { email, password });
+    window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data));
+    setAuth(data);
+    return data.user;
+  }, []);
+
+  const signOut = useCallback(() => {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    setAuth(null);
+    router.push("/");
   }, [router]);
 
   const setCampus = useCallback((id: string) => {
@@ -112,7 +136,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AppCtx.Provider value={{ go, role: "guest", campus, setCampus, showToast }}>
+    <AppCtx.Provider value={{ go, role: auth?.user.role?.toLowerCase() ?? "guest", user: auth?.user ?? null, login, signOut, campus, setCampus, showToast }}>
       {children}
       {toast && (
         <div style={{ position: "fixed", bottom: 26, left: "50%", transform: "translateX(-50%)", zIndex: 200, background: T.ink, color: T.paper, padding: "13px 22px", borderRadius: 12, fontFamily: T.sans, fontSize: 14.5, fontWeight: 500, boxShadow: "0 16px 40px -12px rgba(0,0,0,.5)", display: "flex", alignItems: "center", gap: 9, maxWidth: "90vw" }}>
