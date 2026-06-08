@@ -1,41 +1,50 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { T, naira, I, Photo } from "@/lib/rh/theme";
-import { LISTINGS, STUDENT_BOOKINGS, listingById, landlordById, type DemoBooking } from "@/lib/rh/data";
+import { LISTINGS } from "@/lib/rh/data";
 import { useApp, useViewport } from "@/components/rh/app";
 import { Button, Card, Avatar, StatusBadge, PropertyCard, Input, Field } from "@/components/rh/ui";
 import { DashShell, Stat, EmptyState } from "@/components/rh/dash-shell";
+import { getBookings, mapBooking, signAgreement, confirmMoveIn, type UiBooking } from "@/lib/rh/api";
 
-function BookingRow({ bk, mobile, onAct }: { bk: DemoBooking; mobile: boolean; onAct: (a: string, b: DemoBooking) => void }) {
+function initialsOf(name: string) {
+  return (name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()) || "?";
+}
+
+function BookingRow({ bk, mobile, onAct }: { bk: UiBooking; mobile: boolean; onAct: (a: string, b: UiBooking) => void }) {
   const { go } = useApp();
-  const l = listingById(bk.listingId)!;
-  const lord = landlordById(l.landlord);
-  const total = (bk.bid || l.price) + (bk.agencyFee || 0) + (bk.cautionFee || 0);
+  const p = bk.property;
+  const total = bk.bid + bk.agencyFee + bk.cautionFee;
 
   return (
     <Card pad={0} style={{ overflow: "hidden" }}>
       <div style={{ display: mobile ? "block" : "flex" }}>
         <div style={{ position: "relative", width: mobile ? "100%" : 220, height: mobile ? 150 : "auto", flex: "0 0 auto" }}>
-          <Photo from={l.from} to={l.to} label={l.area} />
+          {p.image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={p.image} alt={p.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          ) : (
+            <Photo from={p.from} to={p.to} label={p.area} />
+          )}
           <span style={{ position: "absolute", top: 12, left: 12 }}><StatusBadge status={bk.status} style={{ background: "rgba(255,255,255,.95)" }} /></span>
         </div>
         <div style={{ flex: 1, padding: mobile ? 18 : 22, minWidth: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontFamily: T.sans, fontSize: 12.5, color: T.ink2, display: "flex", alignItems: "center", gap: 5 }}>{I.pin({ width: 13, height: 13 })}{l.area} · {l.dist} km</div>
-              <h3 style={{ margin: "4px 0 0", fontFamily: T.serif, fontSize: 22, color: T.ink, fontWeight: 500 }}>{l.title}</h3>
+              <div style={{ fontFamily: T.sans, fontSize: 12.5, color: T.ink2, display: "flex", alignItems: "center", gap: 5 }}>{I.pin({ width: 13, height: 13 })}{p.area}</div>
+              <h3 style={{ margin: "4px 0 0", fontFamily: T.serif, fontSize: 22, color: T.ink, fontWeight: 500 }}>{p.title}</h3>
             </div>
             <div style={{ textAlign: mobile ? "left" : "right" }}>
-              <div style={{ fontFamily: T.serif, fontSize: 22, fontWeight: 600, color: T.ink }}>{naira(bk.bid || l.price)}</div>
-              <div style={{ fontFamily: T.sans, fontSize: 11.5, color: T.ink2 }}>your bid · listed {naira(l.price)}</div>
+              <div style={{ fontFamily: T.serif, fontSize: 22, fontWeight: 600, color: T.ink }}>{naira(bk.bid)}</div>
+              <div style={{ fontFamily: T.sans, fontSize: 11.5, color: T.ink2 }}>your bid · listed {naira(p.price)}</div>
             </div>
           </div>
 
           {bk.status === "PENDING" && (
             <div style={{ marginTop: 16, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
               <div style={{ flex: 1, minWidth: 200, display: "flex", alignItems: "center", gap: 9, background: T.goldSoft, borderRadius: 12, padding: "11px 14px", fontFamily: T.sans, fontSize: 13.5, color: T.ink2 }}>
-                {I.clock({ width: 16, height: 16, style: { color: T.gold, flex: "0 0 auto" } })} Waiting for {lord.name.split(" ")[0]} to review your offer.
+                {I.clock({ width: 16, height: 16, style: { color: T.gold, flex: "0 0 auto" } })} Waiting for {p.landlordName.split(" ")[0]} to review your offer.
               </div>
               <Button variant="danger" onClick={() => onAct("cancel", bk)}>Cancel</Button>
             </div>
@@ -53,10 +62,9 @@ function BookingRow({ bk, mobile, onAct }: { bk: DemoBooking; mobile: boolean; o
             <div style={{ marginTop: 16, background: T.claySoft, borderRadius: 14, padding: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                 <span style={{ fontFamily: T.sans, fontSize: 13.5, fontWeight: 700, color: T.clayDeep }}>Payment required to secure this home</span>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontFamily: T.sans, fontSize: 12.5, color: T.clay, fontWeight: 600 }}>{I.clock({ width: 14, height: 14 })} 47h remaining</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12, fontFamily: T.sans, fontSize: 13, color: T.ink2 }}>
-                <span>Rent {naira(bk.bid || 0)} · Agency {naira(bk.agencyFee || 0)} · Caution {naira(bk.cautionFee || 0)}</span>
+                <span>Rent {naira(bk.bid)} · Agency {naira(bk.agencyFee)} · Caution {naira(bk.cautionFee)}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 4 }}>
                 <span style={{ fontFamily: T.sans, fontSize: 13, color: T.ink2 }}>Total due</span>
@@ -75,20 +83,10 @@ function BookingRow({ bk, mobile, onAct }: { bk: DemoBooking; mobile: boolean; o
             <div style={{ marginTop: 16, background: T.greenSoft, borderRadius: 14, padding: 16 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                 {I.checkCircle({ width: 18, height: 18, style: { color: T.green } })}<span style={{ fontFamily: T.sans, fontSize: 14, fontWeight: 700, color: T.green }}>Paid &amp; secured</span>
-                <span style={{ marginLeft: "auto", fontFamily: T.sans, fontSize: 12, color: T.ink2 }}>Lease to {bk.leaseEndDate}</span>
+                {bk.leaseEndDate && <span style={{ marginLeft: "auto", fontFamily: T.sans, fontSize: 12, color: T.ink2 }}>Lease to {new Date(bk.leaseEndDate).toLocaleDateString()}</span>}
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: 10 }}>
-                <div style={{ background: "#fff", borderRadius: 10, padding: 12 }}>
-                  <div style={{ fontFamily: T.sans, fontSize: 11, fontWeight: 700, color: T.ink3, textTransform: "uppercase", letterSpacing: ".05em" }}>Landlord contact</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7 }}><Avatar landlord={lord} size={30} /><div><div style={{ fontFamily: T.sans, fontSize: 13.5, fontWeight: 600, color: T.ink }}>{lord.name}</div><div style={{ fontFamily: T.sans, fontSize: 12, color: T.clay }}>{lord.phone}</div></div></div>
-                </div>
-                <div style={{ background: "#fff", borderRadius: 10, padding: 12 }}>
-                  <div style={{ fontFamily: T.sans, fontSize: 11, fontWeight: 700, color: T.ink3, textTransform: "uppercase", letterSpacing: ".05em" }}>Documents</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontFamily: T.sans, fontSize: 13, color: T.ink, cursor: "pointer" }} onClick={() => go("receipt", bk.id)}>{I.doc({ width: 15, height: 15, style: { color: T.clay } })} Payment receipt</span>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontFamily: T.sans, fontSize: 13, color: T.ink, cursor: "pointer" }}>{I.doc({ width: 15, height: 15, style: { color: T.clay } })} Signed tenancy agreement</span>
-                  </div>
-                </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontFamily: T.sans, fontSize: 13, color: T.ink, cursor: "pointer" }} onClick={() => go("receipt", bk.id)}>{I.doc({ width: 15, height: 15, style: { color: T.clay } })} Payment receipt</span>
               </div>
               {!bk.movedIn ? (
                 <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -102,8 +100,7 @@ function BookingRow({ bk, mobile, onAct }: { bk: DemoBooking; mobile: boolean; o
           )}
 
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14, fontFamily: T.sans, fontSize: 12, color: T.ink3 }}>
-            <span>Listed by {lord.name}</span>
-            <span onClick={() => go("booking", bk.id)} style={{ display: "inline-flex", alignItems: "center", gap: 3, color: T.clay, fontWeight: 600, cursor: "pointer" }}>View details {I.chevRight({ width: 13, height: 13 })}</span>
+            <span>Listed by {p.landlordName}</span>
           </div>
         </div>
       </div>
@@ -111,10 +108,9 @@ function BookingRow({ bk, mobile, onAct }: { bk: DemoBooking; mobile: boolean; o
   );
 }
 
-function AgreementModal({ bk, onClose, onSign }: { bk: DemoBooking; onClose: () => void; onSign: (name: string) => void }) {
+function AgreementModal({ bk, onClose, onSign }: { bk: UiBooking; onClose: () => void; onSign: (name: string) => void }) {
   const [name, setName] = useState("");
   const [read, setRead] = useState(false);
-  const l = listingById(bk.listingId)!;
   const rules = [
     "The tenancy runs for the lease period agreed at booking; rent is paid in full via RentalHub before move-in.",
     "The property is for residential use by the named tenant only — no subletting without written consent.",
@@ -127,7 +123,7 @@ function AgreementModal({ bk, onClose, onSign }: { bk: DemoBooking; onClose: () 
     <div style={{ position: "fixed", inset: 0, zIndex: 150, background: "rgba(33,29,24,.6)", backdropFilter: "blur(3px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: T.paper, borderRadius: 20, width: "100%", maxWidth: 560, maxHeight: "88vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <div style={{ padding: "20px 24px", borderBottom: "1px solid " + T.line, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div><h2 style={{ margin: 0, fontFamily: T.serif, fontSize: 24, color: T.ink, fontWeight: 500 }}>Tenancy agreement</h2><div style={{ fontFamily: T.sans, fontSize: 12.5, color: T.ink2, marginTop: 2 }}>{l.title} · {l.area}</div></div>
+          <div><h2 style={{ margin: 0, fontFamily: T.serif, fontSize: 24, color: T.ink, fontWeight: 500 }}>Tenancy agreement</h2><div style={{ fontFamily: T.sans, fontSize: 12.5, color: T.ink2, marginTop: 2 }}>{bk.property.title} · {bk.property.area}</div></div>
           <span onClick={onClose} style={{ cursor: "pointer", color: T.ink2 }}>{I.x({ width: 22, height: 22 })}</span>
         </div>
         <div style={{ padding: 24, overflowY: "auto", flex: 1 }}>
@@ -155,17 +151,35 @@ function AgreementModal({ bk, onClose, onSign }: { bk: DemoBooking; onClose: () 
 }
 
 export function StudentDash({ initial }: { initial?: string }) {
-  const { go, showToast, campus } = useApp();
+  const { go, showToast, campus, user } = useApp();
   const { mobile } = useViewport();
   const [tab, setTab] = useState(initial || "bookings");
-  const [bookings, setBookings] = useState<DemoBooking[]>(STUDENT_BOOKINGS);
-  const [signing, setSigning] = useState<DemoBooking | null>(null);
+  const [bookings, setBookings] = useState<UiBooking[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [signing, setSigning] = useState<UiBooking | null>(null);
 
-  const update = (id: string, patch: Partial<DemoBooking>) => setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, ...patch } : b)));
-  const onAct = (action: string, bk: DemoBooking) => {
-    if (action === "cancel") { update(bk.id, { status: "CANCELLED" }); showToast("Booking cancelled"); }
-    else if (action === "sign") setSigning(bk);
-    else if (action === "movein") { update(bk.id, { movedIn: true }); showToast("Move-in confirmed · payment released"); }
+  useEffect(() => {
+    let active = true;
+    getBookings()
+      .then((bs) => { if (active) setBookings(bs.map(mapBooking)); })
+      .catch((e) => { if (active) setError(e instanceof Error ? e.message : "Failed to load bookings"); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const update = (id: string, patch: Partial<UiBooking>) => setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, ...patch } : b)));
+
+  const onAct = async (action: string, bk: UiBooking) => {
+    if (action === "cancel") {
+      setBookings((bs) => bs.filter((b) => b.id !== bk.id));
+      showToast("Booking removed");
+    } else if (action === "sign") {
+      setSigning(bk);
+    } else if (action === "movein") {
+      try { await confirmMoveIn(bk.id); update(bk.id, { movedIn: true }); showToast("Move-in confirmed · payment released"); }
+      catch (e) { showToast(e instanceof Error ? e.message : "Couldn't confirm move-in"); }
+    }
   };
 
   const counts = {
@@ -175,6 +189,7 @@ export function StudentDash({ initial }: { initial?: string }) {
     pending: bookings.filter((b) => b.status === "PENDING").length,
   };
   const visible = bookings.filter((b) => b.status !== "CANCELLED");
+  const userName = user?.name ?? "Student";
 
   return (
     <DashShell role="student" tab={tab} setTab={(t) => (t === "home" ? go("search") : setTab(t))} title="Student dashboard" subtitle="Browse homes and manage your bookings"
@@ -191,20 +206,27 @@ export function StudentDash({ initial }: { initial?: string }) {
       {tab === "profile" ? (
         <Card pad={mobile ? 22 : 30} style={{ maxWidth: 560 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <Avatar landlord={{ initials: "CE", color: "#3C5A86" }} size={64} />
-            <div><div style={{ fontFamily: T.serif, fontSize: 24, color: T.ink }}>Chioma Eze</div><div style={{ fontFamily: T.sans, fontSize: 13.5, color: T.ink2 }}>{campus.short} · 300 Level</div></div>
+            <Avatar landlord={{ initials: initialsOf(userName), color: "#3C5A86" }} size={64} />
+            <div><div style={{ fontFamily: T.serif, fontSize: 24, color: T.ink }}>{userName}</div><div style={{ fontFamily: T.sans, fontSize: 13.5, color: T.ink2 }}>{campus.short}</div></div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 24 }}>
-            <Field label="Full name"><Input defaultValue="Chioma Eze" /></Field>
-            <Field label="Email"><Input defaultValue="chioma.eze@email.com" /></Field>
-            <Field label="Phone"><Input defaultValue="0807 555 0190" /></Field>
-            <div><Button onClick={() => showToast("Profile saved")}>Save changes</Button></div>
+            <Field label="Full name"><Input defaultValue={userName} /></Field>
+            <Field label="Email"><Input defaultValue={user?.email ?? ""} /></Field>
+            <div><Button onClick={() => showToast("Profile saving isn't wired yet")}>Save changes</Button></div>
           </div>
         </Card>
       ) : tab === "saved" ? (
         <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "repeat(auto-fill,minmax(248px,1fr))", gap: 20 }}>
           {LISTINGS.filter((l) => l.featured).slice(0, 3).map((l) => <PropertyCard key={l.id} l={l} mobile={mobile} onClick={() => go("property", l.id)} />)}
         </div>
+      ) : loading ? (
+        <Card pad={48} style={{ textAlign: "center" }}><div style={{ fontFamily: T.sans, color: T.ink2 }}>Loading your bookings…</div></Card>
+      ) : error ? (
+        <Card pad={48} style={{ textAlign: "center" }}>
+          <div style={{ width: 56, height: 56, borderRadius: 16, background: T.redSoft, color: T.red, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>{I.shieldAlert({ width: 26, height: 26 })}</div>
+          <div style={{ fontFamily: T.serif, fontSize: 22, color: T.ink }}>Couldn&apos;t load bookings</div>
+          <p style={{ fontFamily: T.sans, fontSize: 14, color: T.ink2, marginTop: 8 }}>{error} — try signing in again.</p>
+        </Card>
       ) : visible.length === 0 ? (
         <EmptyState icon={I.inbox} title="No bookings yet" sub="Browse verified homes near your campus and place your first booking." action={<Button onClick={() => go("search")} iconRight={I.arrow}>Browse homes</Button>} />
       ) : (
@@ -213,7 +235,11 @@ export function StudentDash({ initial }: { initial?: string }) {
         </div>
       )}
 
-      {signing && <AgreementModal bk={signing} onClose={() => setSigning(null)} onSign={(name) => { update(signing.id, { agreementSigned: true, agreementName: name }); setSigning(null); showToast("Agreement signed — you can now pay"); }} />}
+      {signing && <AgreementModal bk={signing} onClose={() => setSigning(null)} onSign={async (name) => {
+        const bk = signing; setSigning(null);
+        try { await signAgreement(bk.id, name); update(bk.id, { agreementSigned: true }); showToast("Agreement signed — you can now pay"); }
+        catch (e) { showToast(e instanceof Error ? e.message : "Couldn't sign agreement"); }
+      }} />}
     </DashShell>
   );
 }

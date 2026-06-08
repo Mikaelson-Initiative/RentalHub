@@ -110,3 +110,45 @@ export function mapProperty(p: ApiProperty): UiListing & { images: string[] } {
     landlordEmail: p.landlord?.email,
   };
 }
+
+// ── Bookings ──────────────────────────────────────────────────
+export interface ApiBooking {
+  id: string; status: string;
+  bidAmount?: number | string | null; amount?: number | string | null; agencyFee?: number | string | null; cautionFee?: number | string | null;
+  paidAt?: string | null; moveInDate?: string | null; leaseEndDate?: string | null; movedInConfirmedAt?: string | null; agreementSignedAt?: string | null; createdAt: string;
+  property?: (ApiProperty & { landlord?: ApiLandlord | null }) | null;
+}
+export interface UiBooking {
+  id: string; status: string; bid: number; agencyFee: number; cautionFee: number; createdAt: string;
+  paidAt?: string | null; leaseEndDate?: string | null; movedIn: boolean; agreementSigned: boolean;
+  property: { id: string; title: string; area: string; price: number; image: string | null; from: string; to: string; landlordName: string };
+}
+export function mapBooking(b: ApiBooking): UiBooking {
+  const p = b.property;
+  const [from, to] = toneFor(p?.id ?? b.id);
+  return {
+    id: b.id,
+    status: b.status,
+    bid: Number(b.bidAmount ?? b.amount ?? p?.price ?? 0) || 0,
+    agencyFee: Number(b.agencyFee ?? 0) || 0,
+    cautionFee: Number(b.cautionFee ?? 0) || 0,
+    createdAt: b.createdAt,
+    paidAt: b.paidAt ?? null,
+    leaseEndDate: b.leaseEndDate ?? null,
+    movedIn: !!b.movedInConfirmedAt,
+    agreementSigned: !!b.agreementSignedAt,
+    property: {
+      id: p?.id ?? "",
+      title: p?.title ?? "Property",
+      area: p?.location?.name ?? "—",
+      price: Number(p?.price ?? 0) || 0,
+      image: imageStrings(p?.images)[0] ?? null,
+      from, to,
+      landlordName: p?.landlord?.name ?? "Landlord",
+    },
+  };
+}
+
+export const getBookings = () => apiGet<ApiBooking[]>("/api/bookings");
+export const signAgreement = (bookingId: string, signedName: string) => apiPost("/api/bookings/sign-agreement", { bookingId, signedName });
+export const confirmMoveIn = (bookingId: string) => apiPost("/api/bookings/moved-in", { bookingId });
