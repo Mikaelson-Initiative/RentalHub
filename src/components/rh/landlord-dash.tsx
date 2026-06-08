@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { T, naira, I, Photo, amenityIcon } from "@/lib/rh/theme";
-import { LANDLORD_REQUESTS, LANDLORD_EARNINGS, PROPERTY_TYPES, DISTANCES, AMENITY_GROUPS, AREAS, listingById, type DemoRequest } from "@/lib/rh/data";
+import { PROPERTY_TYPES, DISTANCES, AMENITY_GROUPS, AREAS } from "@/lib/rh/data";
 import { useApp, useViewport } from "@/components/rh/app";
 import { Button, Card, Avatar, StatusBadge, Pill, Field, Input, Select, Textarea } from "@/components/rh/ui";
 import { DashShell, Stat, EmptyState } from "@/components/rh/dash-shell";
+import { getMyListings, getLandlordRequests, getEarnings, setBookingStatus, mapProperty, mapRequest, type UiListing, type UiRequest, type EarningsData } from "@/lib/rh/api";
 
-const MY_LISTINGS = ["uro-sc", "odooja-rp", "uro-room"].map((id) => listingById(id)!);
+function initialsOf(name: string) {
+  return (name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()) || "?";
+}
 
 function VerifyBanner({ status, onStart }: { status: string; onStart: () => void }) {
   if (status === "VERIFIED") return (
@@ -63,6 +66,7 @@ function VerificationFlow({ status, setStatus }: { status: string; setStatus: (s
         ))}
       </div>
       <div style={{ marginTop: 22 }}><Button full size="lg" disabled={!done.every(Boolean)} onClick={() => { setStatus("UNDER_REVIEW"); showToast("Documents submitted for review"); }}>Submit for verification</Button></div>
+      <p style={{ fontFamily: T.sans, fontSize: 11.5, color: T.ink3, marginTop: 12, textAlign: "center" }}>Document upload + submission isn&apos;t wired to the backend yet.</p>
     </Card>
   );
 }
@@ -152,13 +156,6 @@ function AddPropertyWizard({ onClose }: { onClose: () => void }) {
                 <Field label="Agency fee (₦)" hint="Optional"><Input type="number" value={data.agency} onChange={(e) => set("agency", e.target.value)} placeholder="0" /></Field>
                 <Field label="Caution fee (₦)" hint="Optional"><Input type="number" value={data.caution} onChange={(e) => set("caution", e.target.value)} placeholder="0" /></Field>
               </div>
-              <div>
-                <div style={{ fontFamily: T.sans, fontSize: 12.5, fontWeight: 600, color: T.ink2, marginBottom: 8 }}>Photos</div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
-                  <div style={{ aspectRatio: "1", borderRadius: 12, border: "1.5px dashed " + T.line, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer", color: T.ink2, background: "#fff" }}>{I.plus({ width: 22, height: 22 })}<span style={{ fontFamily: T.sans, fontSize: 11 }}>Add</span></div>
-                  {[0, 1, 2].map((i) => <div key={i} style={{ aspectRatio: "1", borderRadius: 12, overflow: "hidden" }}><Photo seed={i} tag={false} /></div>)}
-                </div>
-              </div>
               <Card pad={14} style={{ background: T.greenSoft, border: "none", display: "flex", alignItems: "flex-start", gap: 11 }}>
                 {I.shield({ width: 18, height: 18, style: { color: T.green, flex: "0 0 auto", marginTop: 1 } })}
                 <span style={{ fontFamily: T.sans, fontSize: 12.5, color: T.green, lineHeight: 1.5 }}>Your listing goes to our admin team for review (usually within 24 hours) before appearing in search.</span>
@@ -171,7 +168,7 @@ function AddPropertyWizard({ onClose }: { onClose: () => void }) {
           <Button variant="outline" onClick={() => (step === 0 ? onClose() : setStep(step - 1))}>{step === 0 ? "Cancel" : "Back"}</Button>
           {step < 2
             ? <Button onClick={() => setStep(step + 1)} iconRight={I.arrow}>Continue</Button>
-            : <Button variant="dark" icon={I.check} onClick={() => { onClose(); showToast("Listing submitted for review"); }}>Submit listing</Button>}
+            : <Button variant="dark" icon={I.check} onClick={() => { onClose(); showToast("Listing form submitted (saving to backend coming soon)"); }}>Submit listing</Button>}
         </div>
       </div>
     </div>
@@ -179,15 +176,42 @@ function AddPropertyWizard({ onClose }: { onClose: () => void }) {
 }
 
 export function LandlordDash({ initial, openAdd }: { initial?: string; openAdd?: boolean }) {
-  const { go, showToast } = useApp();
+  const { go, showToast, user } = useApp();
   const { mobile } = useViewport();
   const [tab, setTab] = useState(initial || "listings");
   const [vstatus, setVstatus] = useState("UNVERIFIED");
-  const [requests, setRequests] = useState<DemoRequest[]>(LANDLORD_REQUESTS);
   const [adding, setAdding] = useState(!!openAdd);
 
-  const pendingReqs = requests.filter((r) => r.status === "PENDING" || r.status === "AWAITING_PAYMENT").length;
-  const setReq = (id: string, patch: Partial<DemoRequest>) => setRequests((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const [listings, setListings] = useState<UiListing[]>([]);
+  const [requests, setRequests] = useState<UiRequest[]>([]);
+  const [earnings, setEarnings] = useState<EarningsData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    Promise.allSettled([getMyListings(), getLandlordRequests(), getEarnings()]).then((res) => {
+      if (!active) return;
+      const [l, r, e] = res;
+      if (l.status === "fulfilled") setListings(l.value.items.map(mapProperty));
+      if (r.status === "fulfilled") setRequests(r.value.map(mapRequest));
+      if (e.status === "fulfilled") setEarnings(e.value);
+      setLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const pendingReqs = requests.filter((r) => r.status === "PENDING").length;
+  const reqCountFor = (pid: string) => requests.filter((r) => r.propertyId === pid).length;
+
+  const act = async (id: string, status: "CONFIRMED" | "CANCELLED") => {
+    try {
+      await setBookingStatus(id, status);
+      setRequests((rs) => rs.map((r) => (r.id === id ? { ...r, status } : r)));
+      showToast(status === "CONFIRMED" ? "Offer accepted — student notified" : "Offer declined");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Action failed");
+    }
+  };
 
   return (
     <DashShell role="landlord" tab={tab} setTab={setTab} title="Landlord dashboard" subtitle="Manage your listings and tenant requests"
@@ -197,67 +221,70 @@ export function LandlordDash({ initial, openAdd }: { initial?: string; openAdd?:
       <VerifyBanner status={vstatus} onStart={() => setTab("verification")} />
 
       <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr 1fr" : "repeat(4,1fr)", gap: mobile ? 12 : 18, marginBottom: 26 }}>
-        <Stat label="Total listings" value={MY_LISTINGS.length} tone="ink" icon={I.building} onClick={() => setTab("listings")} active={tab === "listings"} />
-        <Stat label="Approved" value={MY_LISTINGS.length} tone="green" icon={I.checkCircle} />
+        <Stat label="Total listings" value={listings.length} tone="ink" icon={I.building} onClick={() => setTab("listings")} active={tab === "listings"} />
         <Stat label="Pending requests" value={pendingReqs} tone="clay" icon={I.inbox} onClick={() => setTab("requests")} active={tab === "requests"} />
-        <Stat label="All-time earnings" value={naira(LANDLORD_EARNINGS.total)} tone="gold" icon={I.wallet} onClick={() => setTab("earnings")} active={tab === "earnings"} />
+        <Stat label="Paid bookings" value={earnings?.totalPaidBookings ?? 0} tone="green" icon={I.checkCircle} />
+        <Stat label="All-time earnings" value={naira(earnings?.totalEarnings ?? 0)} tone="gold" icon={I.wallet} onClick={() => setTab("earnings")} active={tab === "earnings"} />
       </div>
 
       {tab === "listings" && (
-        <Card pad={0} style={{ overflow: "hidden" }}>
-          {MY_LISTINGS.map((l, i) => (
-            <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 16, padding: mobile ? 14 : 18, borderTop: i ? "1px solid " + T.line2 : "none" }}>
-              <div style={{ width: mobile ? 56 : 72, height: mobile ? 56 : 72, borderRadius: 12, overflow: "hidden", flex: "0 0 auto" }}><Photo from={l.from} to={l.to} tag={false} /></div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: T.serif, fontSize: mobile ? 17 : 19, color: T.ink, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.title}</div>
-                <div style={{ fontFamily: T.sans, fontSize: 12.5, color: T.ink2, display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>{I.pin({ width: 12, height: 12 })}{l.area} · {naira(l.price)}/yr</div>
+        loading ? <Card pad={40} style={{ textAlign: "center" }}><div style={{ fontFamily: T.sans, color: T.ink2 }}>Loading your listings…</div></Card>
+        : listings.length === 0 ? <EmptyState icon={I.building} title="No listings yet" sub="Add your first property to start receiving tenant requests." action={<Button icon={I.plus} onClick={() => setAdding(true)}>Add property</Button>} />
+        : (
+          <Card pad={0} style={{ overflow: "hidden" }}>
+            {listings.map((l, i) => (
+              <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 16, padding: mobile ? 14 : 18, borderTop: i ? "1px solid " + T.line2 : "none" }}>
+                <div style={{ width: mobile ? 56 : 72, height: mobile ? 56 : 72, borderRadius: 12, overflow: "hidden", flex: "0 0 auto" }}>
+                  {l.image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={l.image} alt={l.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  ) : (
+                    <Photo from={l.from} to={l.to} tag={false} />
+                  )}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: T.serif, fontSize: mobile ? 17 : 19, color: T.ink, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.title}</div>
+                  <div style={{ fontFamily: T.sans, fontSize: 12.5, color: T.ink2, display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>{I.pin({ width: 12, height: 12 })}{l.area} · {naira(l.price)}/yr</div>
+                </div>
+                <div style={{ textAlign: "center", flex: "0 0 auto" }}>
+                  <div style={{ fontFamily: T.serif, fontSize: 19, color: T.ink, fontWeight: 600 }}>{reqCountFor(l.id)}</div>
+                  <div style={{ fontFamily: T.sans, fontSize: 10.5, color: T.ink3 }}>requests</div>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => go("manage", l.id)} iconRight={I.chevRight}>{mobile ? "" : "Manage"}</Button>
               </div>
-              {!mobile && <StatusBadge status="APPROVED" />}
-              <div style={{ textAlign: "center", flex: "0 0 auto" }}>
-                <div style={{ fontFamily: T.serif, fontSize: 19, color: T.ink, fontWeight: 600 }}>{requests.filter((r) => r.listingId === l.id).length}</div>
-                <div style={{ fontFamily: T.sans, fontSize: 10.5, color: T.ink3 }}>requests</div>
-              </div>
-              <Button variant="ghost" size="sm" onClick={() => go("manage", l.id)} iconRight={I.chevRight}>{mobile ? "" : "Manage"}</Button>
-            </div>
-          ))}
-        </Card>
+            ))}
+          </Card>
+        )
       )}
 
       {tab === "requests" && (
-        requests.length === 0 ? <EmptyState title="No tenant requests yet" sub="When students place offers on your homes, they'll appear here." />
+        loading ? <Card pad={40} style={{ textAlign: "center" }}><div style={{ fontFamily: T.sans, color: T.ink2 }}>Loading requests…</div></Card>
+        : requests.length === 0 ? <EmptyState title="No tenant requests yet" sub="When students place offers on your homes, they'll appear here." />
         : (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {requests.map((r) => {
-              const l = listingById(r.listingId)!;
-              const competing = requests.filter((x) => x.listingId === r.listingId && x.status === "PENDING");
-              const maxBid = Math.max(...competing.map((x) => x.bid));
-              const canAccept = competing.length < 2 || r.bid >= maxBid;
-              return (
-                <Card key={r.id} pad={mobile ? 16 : 20}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-                    <div style={{ display: "flex", gap: 14, minWidth: 0, flex: 1 }}>
-                      <Avatar landlord={{ initials: r.student.split(" ").map((w) => w[0]).join(""), color: "#3C5A86" }} size={46} />
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontFamily: T.sans, fontSize: 15.5, fontWeight: 700, color: T.ink }}>{r.student}</div>
-                        <div style={{ fontFamily: T.sans, fontSize: 13, color: T.ink2, marginTop: 1 }}>{l.title}</div>
-                        <div style={{ fontFamily: T.sans, fontSize: 13.5, marginTop: 8 }}>Offer: <strong style={{ color: T.green, fontSize: 15 }}>{naira(r.bid)}</strong> <span style={{ color: T.ink3 }}>· listed {naira(l.price)}</span></div>
-                        {competing.length >= 2 && r.status === "PENDING" && <div style={{ fontFamily: T.sans, fontSize: 11.5, color: T.clay, marginTop: 5 }}>{competing.length} competing offers — only the highest can be accepted</div>}
-                        {r.status === "AWAITING_PAYMENT" && <div style={{ fontFamily: T.sans, fontSize: 11.5, color: T.clay, marginTop: 5, display: "flex", alignItems: "center", gap: 4 }}>{I.clock({ width: 12, height: 12 })} Student has 48h to pay</div>}
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: mobile ? "stretch" : "flex-end", gap: 8, flex: "0 0 auto" }}>
-                      {r.status === "PENDING" ? (
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <Button variant="danger" size="sm" onClick={() => { setReq(r.id, { status: "CANCELLED" }); showToast("Offer declined"); }}>Decline</Button>
-                          <Button variant="green" size="sm" disabled={!canAccept} onClick={() => { setReq(r.id, { status: "AWAITING_PAYMENT" }); showToast("Offer accepted — student notified to pay"); }}>Accept</Button>
-                        </div>
-                      ) : <StatusBadge status={r.status} />}
-                      <span style={{ fontFamily: T.sans, fontSize: 11, color: T.ink3 }}>{r.createdAt}</span>
+            {requests.map((r) => (
+              <Card key={r.id} pad={mobile ? 16 : 20}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: 14, minWidth: 0, flex: 1 }}>
+                    <Avatar landlord={{ initials: initialsOf(r.studentName), color: "#3C5A86" }} size={46} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontFamily: T.sans, fontSize: 15.5, fontWeight: 700, color: T.ink }}>{r.studentName}</div>
+                      <div style={{ fontFamily: T.sans, fontSize: 13, color: T.ink2, marginTop: 1 }}>{r.propertyTitle}</div>
+                      <div style={{ fontFamily: T.sans, fontSize: 13.5, marginTop: 8 }}>Offer: <strong style={{ color: T.green, fontSize: 15 }}>{naira(r.bid)}</strong></div>
                     </div>
                   </div>
-                </Card>
-              );
-            })}
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: mobile ? "stretch" : "flex-end", gap: 8, flex: "0 0 auto" }}>
+                    {r.status === "PENDING" ? (
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <Button variant="danger" size="sm" onClick={() => act(r.id, "CANCELLED")}>Decline</Button>
+                        <Button variant="green" size="sm" onClick={() => act(r.id, "CONFIRMED")}>Accept</Button>
+                      </div>
+                    ) : <StatusBadge status={r.status} />}
+                    <span style={{ fontFamily: T.sans, fontSize: 11, color: T.ink3 }}>{new Date(r.createdAt).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              </Card>
+            ))}
           </div>
         )
       )}
@@ -265,19 +292,20 @@ export function LandlordDash({ initial, openAdd }: { initial?: string; openAdd?:
       {tab === "earnings" && (
         <div>
           <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "repeat(3,1fr)", gap: 18, marginBottom: 24 }}>
-            <Card pad={22} style={{ background: T.greenSoft, border: "none" }}><div style={{ fontFamily: T.sans, fontSize: 13, color: T.green, fontWeight: 600 }}>Total earnings</div><div style={{ fontFamily: T.serif, fontSize: 36, fontWeight: 600, color: T.green, marginTop: 6 }}>{naira(LANDLORD_EARNINGS.total)}</div><div style={{ fontFamily: T.sans, fontSize: 11.5, color: T.ink2, marginTop: 2 }}>All time</div></Card>
-            <Card pad={22}><div style={{ fontFamily: T.sans, fontSize: 13, color: T.ink2, fontWeight: 600 }}>This month</div><div style={{ fontFamily: T.serif, fontSize: 36, fontWeight: 600, color: T.ink, marginTop: 6 }}>{naira(LANDLORD_EARNINGS.monthly)}</div><div style={{ fontFamily: T.sans, fontSize: 11.5, color: T.ink2, marginTop: 2 }}>June 2026</div></Card>
-            <Card pad={22}><div style={{ fontFamily: T.sans, fontSize: 13, color: T.ink2, fontWeight: 600 }}>Paid bookings</div><div style={{ fontFamily: T.serif, fontSize: 36, fontWeight: 600, color: T.ink, marginTop: 6 }}>{LANDLORD_EARNINGS.paidCount}</div><div style={{ fontFamily: T.sans, fontSize: 11.5, color: T.ink2, marginTop: 2 }}>Completed payments</div></Card>
+            <Card pad={22} style={{ background: T.greenSoft, border: "none" }}><div style={{ fontFamily: T.sans, fontSize: 13, color: T.green, fontWeight: 600 }}>Total earnings</div><div style={{ fontFamily: T.serif, fontSize: 36, fontWeight: 600, color: T.green, marginTop: 6 }}>{naira(earnings?.totalEarnings ?? 0)}</div><div style={{ fontFamily: T.sans, fontSize: 11.5, color: T.ink2, marginTop: 2 }}>All time</div></Card>
+            <Card pad={22}><div style={{ fontFamily: T.sans, fontSize: 13, color: T.ink2, fontWeight: 600 }}>This month</div><div style={{ fontFamily: T.serif, fontSize: 36, fontWeight: 600, color: T.ink, marginTop: 6 }}>{naira(earnings?.monthlyEarnings ?? 0)}</div></Card>
+            <Card pad={22}><div style={{ fontFamily: T.sans, fontSize: 13, color: T.ink2, fontWeight: 600 }}>Paid bookings</div><div style={{ fontFamily: T.serif, fontSize: 36, fontWeight: 600, color: T.ink, marginTop: 6 }}>{earnings?.totalPaidBookings ?? 0}</div></Card>
           </div>
           <Card pad={0} style={{ overflow: "hidden" }}>
             <div style={{ padding: "16px 20px", borderBottom: "1px solid " + T.line2, fontFamily: T.serif, fontSize: 20, color: T.ink }}>Payment history</div>
-            {LANDLORD_EARNINGS.rows.map((row, i) => { const l = listingById(row.listingId)!; return (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 14, padding: mobile ? "14px 16px" : "16px 20px", borderTop: i ? "1px solid " + T.line2 : "none", flexWrap: "wrap" }}>
-                <div style={{ flex: 1, minWidth: 140 }}><div style={{ fontFamily: T.sans, fontSize: 14, fontWeight: 600, color: T.ink }}>{l.title}</div><div style={{ fontFamily: T.sans, fontSize: 12, color: T.ink2 }}>{row.student} · moved in {row.moveIn}</div></div>
-                {!mobile && <span style={{ fontFamily: "monospace", fontSize: 11.5, color: T.ink3 }}>{row.ref}</span>}
+            {!earnings || earnings.bookings.length === 0 ? (
+              <div style={{ padding: 24, fontFamily: T.sans, fontSize: 14, color: T.ink2 }}>No payments yet.</div>
+            ) : earnings.bookings.map((row, i) => (
+              <div key={row.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: mobile ? "14px 16px" : "16px 20px", borderTop: i ? "1px solid " + T.line2 : "none", flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: 140 }}><div style={{ fontFamily: T.sans, fontSize: 14, fontWeight: 600, color: T.ink }}>{row.propertyTitle}</div><div style={{ fontFamily: T.sans, fontSize: 12, color: T.ink2 }}>{row.studentName}{row.moveInDate ? ` · moved in ${new Date(row.moveInDate).toLocaleDateString()}` : ""}</div></div>
                 <div style={{ fontFamily: T.serif, fontSize: 18, fontWeight: 600, color: T.green }}>{naira(row.amount)}</div>
               </div>
-            ); })}
+            ))}
           </Card>
         </div>
       )}
@@ -287,17 +315,13 @@ export function LandlordDash({ initial, openAdd }: { initial?: string; openAdd?:
       {tab === "profile" && (
         <Card pad={mobile ? 22 : 30} style={{ maxWidth: 560 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <Avatar landlord="adebayo" size={64} />
-            <div><div style={{ fontFamily: T.serif, fontSize: 24, color: T.ink }}>Adebayo Ogunleye</div><div style={{ display: "flex", gap: 8, marginTop: 6 }}><Pill tone="green" icon={I.star}>4.9 · 38 reviews</Pill></div></div>
+            <Avatar landlord={{ initials: initialsOf(user?.name ?? "Landlord"), color: "#2F5D4F" }} size={64} />
+            <div><div style={{ fontFamily: T.serif, fontSize: 24, color: T.ink }}>{user?.name ?? "Landlord"}</div><div style={{ display: "flex", gap: 8, marginTop: 6 }}><Pill tone={user?.verificationStatus === "VERIFIED" ? "green" : "gold"} icon={I.shield}>{user?.verificationStatus ?? "UNVERIFIED"}</Pill></div></div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 24 }}>
-            <Field label="Display name"><Input defaultValue="Adebayo Ogunleye" /></Field>
-            <Field label="Phone"><Input defaultValue="0803 555 0142" /></Field>
-            <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: 14 }}>
-              <Field label="Bank"><Input defaultValue="Access Bank" /></Field>
-              <Field label="Account number"><Input defaultValue="0987654321" /></Field>
-            </div>
-            <div><Button onClick={() => showToast("Profile saved")}>Save changes</Button></div>
+            <Field label="Display name"><Input defaultValue={user?.name ?? ""} /></Field>
+            <Field label="Email"><Input defaultValue={user?.email ?? ""} /></Field>
+            <div><Button onClick={() => showToast("Profile saving isn't wired yet")}>Save changes</Button></div>
           </div>
         </Card>
       )}

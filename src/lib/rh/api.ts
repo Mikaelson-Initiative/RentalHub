@@ -38,6 +38,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const apiGet = <T>(path: string) => request<T>(path);
 export const apiPost = <T>(path: string, body?: unknown) => request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined });
 export const apiPut = <T>(path: string, body?: unknown) => request<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined });
+export const apiPatch = <T>(path: string, body?: unknown) => request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined });
 
 // ── Auth (cross-origin-safe: plain JSON POSTs, no session cookie needed) ──
 export const registerUser = (body: { name: string; email: string; password: string; role: string }) =>
@@ -152,3 +153,26 @@ export function mapBooking(b: ApiBooking): UiBooking {
 export const getBookings = () => apiGet<ApiBooking[]>("/api/bookings");
 export const signAgreement = (bookingId: string, signedName: string) => apiPost("/api/bookings/sign-agreement", { bookingId, signedName });
 export const confirmMoveIn = (bookingId: string) => apiPost("/api/bookings/moved-in", { bookingId });
+
+// ── Landlord ──────────────────────────────────────────────────
+export interface UiRequest { id: string; status: string; studentName: string; bid: number; propertyTitle: string; propertyArea: string; propertyId: string; createdAt: string }
+export function mapRequest(b: ApiBooking & { student?: { name?: string } }): UiRequest {
+  return {
+    id: b.id,
+    status: b.status,
+    studentName: b.student?.name ?? "Student",
+    bid: Number(b.bidAmount ?? b.amount ?? 0) || 0,
+    propertyTitle: b.property?.title ?? "Property",
+    propertyArea: b.property?.location?.name ?? "—",
+    propertyId: b.property?.id ?? "",
+    createdAt: b.createdAt,
+  };
+}
+export interface EarningsData {
+  totalEarnings: number; monthlyEarnings: number; totalPaidBookings: number;
+  bookings: Array<{ id: string; propertyTitle: string; studentName: string; amount: number; paidAt: string | null; moveInDate: string | null; paystackRef: string | null }>;
+}
+export const getMyListings = () => apiGet<ApiListResponse>("/api/properties?mine=true&pageSize=50");
+export const getLandlordRequests = () => apiGet<(ApiBooking & { student?: { name?: string } })[]>("/api/bookings");
+export const setBookingStatus = (id: string, status: "CONFIRMED" | "CANCELLED") => apiPatch(`/api/bookings/${id}`, { status });
+export const getEarnings = () => apiGet<EarningsData>("/api/landlord/earnings");
