@@ -4,6 +4,7 @@ import { T, naira, I, Photo } from "@/lib/rh/theme";
 import { LISTINGS, AREAS } from "@/lib/rh/data";
 import { useApp, useViewport } from "@/components/rh/app";
 import { Pill, Button, Card, SectionHead, PropertyCard, PublicNav, Footer } from "@/components/rh/ui";
+import { TourVideo } from "@/components/rh/tour-video";
 
 function HeroSearch({ mobile }: { mobile: boolean }) {
   const { go } = useApp();
@@ -53,8 +54,8 @@ export default function HomePage() {
 
         {/* Floating media card */}
         <div style={{ position: "relative", marginTop: mobile ? 34 : 0, height: mobile ? 380 : 540 }}>
-          <div onClick={() => go("property", "uro-sc")} style={{ position: "absolute", inset: 0, borderRadius: 28, overflow: "hidden", boxShadow: "0 40px 80px -40px rgba(33,29,24,.55)", cursor: "pointer" }}>
-            <Photo from="#caa878" to="#7a5c38" tag={false} />
+          <div style={{ position: "absolute", inset: 0, borderRadius: 28, overflow: "hidden", boxShadow: "0 40px 80px -40px rgba(33,29,24,.55)" }}>
+            <TourVideo />
           </div>
           <div style={{ position: "absolute", left: mobile ? 14 : 20, right: mobile ? 14 : 20, bottom: mobile ? 14 : 20, background: "rgba(255,255,255,.93)", backdropFilter: "blur(8px)", borderRadius: 18, padding: mobile ? 14 : 18 }}>
             <div style={{ display: "flex", gap: 6, marginBottom: 11 }}>
