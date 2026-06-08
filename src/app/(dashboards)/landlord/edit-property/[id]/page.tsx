@@ -1,329 +1,73 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft, Save, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { useParams } from "next/navigation";
+import { T, I, amenityIcon, Photo, Logo } from "@/lib/rh/theme";
+import { listingById, PROPERTY_TYPES, AMENITY_GROUPS, AREAS } from "@/lib/rh/data";
+import { useApp, useViewport } from "@/components/rh/app";
+import { Button, Card, Field, Input, Select, Textarea } from "@/components/rh/ui";
 
-interface Location {
-  id: string;
-  name: string;
-}
-
-interface PropertyData {
-  id: string;
-  title: string;
-  description: string;
-  price: number;
-  distanceToCampus: number | null;
-  amenities: string[];
-  images: unknown[];
-  status: string;
-  location: Location;
-  locationId: string;
-  vacantUnits: number;
-}
-
-const AMENITY_OPTIONS = [
-  "Wi-Fi / Internet",
-  "Prepaid Meter",
-  "Generator Backup",
-  "Solar Power",
-  "Borehole / Running Water",
-  "Security / Gated",
-  "CCTV",
-  "Parking Space",
-  "Wardrobe / Closet",
-  "Tiled Floors",
-  "POP Ceiling",
-  "Kitchen",
-  "Bathroom en-suite",
-  "Balcony",
-  "Furnished",
-  "Air Conditioning",
-  "Nearby Market",
-];
+interface EditData { title: string; type: string; units: number | string; gender: string; desc: string; area: string; price: number | string; agency: number; caution: number; landmark: string; amenities: string[] }
 
 export default function EditPropertyPage() {
+  const { go, showToast } = useApp();
+  const { mobile } = useViewport();
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
-
-  const [property, setProperty] = useState<PropertyData | null>(null);
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-
-  // Form state
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [price, setPrice] = useState("");
-  const [locationId, setLocationId] = useState("");
-  const [distanceToCampus, setDistanceToCampus] = useState("");
-  const [amenities, setAmenities] = useState<string[]>([]);
-  const [vacantUnits, setVacantUnits] = useState("1");
-
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const [propRes, locRes] = await Promise.all([
-        fetch(`/api/properties/${id}`, { cache: "no-store" }),
-        fetch("/api/locations", { cache: "no-store" }),
-      ]);
-
-      const propData = await propRes.json();
-      const locData = await locRes.json();
-
-      if (!propRes.ok || !propData.success) throw new Error(propData.error || "Property not found.");
-      if (!locRes.ok || !locData.success) throw new Error("Could not load locations.");
-
-      const prop = propData.data as PropertyData;
-      setProperty(prop);
-      setTitle(prop.title);
-      setDescription(prop.description);
-      setPrice(String(prop.price));
-      setLocationId(prop.locationId);
-      setDistanceToCampus(prop.distanceToCampus ? String(prop.distanceToCampus) : "");
-      setAmenities(Array.isArray(prop.amenities) ? prop.amenities : []);
-      setVacantUnits(String(prop.vacantUnits ?? 1));
-      setLocations(locData.data ?? []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load property.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [id]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  const toggleAmenity = (amenity: string) => {
-    setAmenities((prev) =>
-      prev.includes(amenity) ? prev.filter((a) => a !== amenity) : [...prev, amenity],
-    );
-  };
-
-  const handleDelete = async () => {
-    if (!confirm("Are you sure you want to delete this property? This cannot be undone.")) return;
-    setIsDeleting(true);
-    setError("");
-    try {
-      const response = await fetch(`/api/properties/${id}`, { method: "DELETE" });
-      const payload = await response.json();
-      if (!response.ok || !payload.success) throw new Error(payload.error || "Failed to delete property.");
-      router.push("/landlord");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete property.");
-      setIsDeleting(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSaving(true);
-    setError("");
-    setSuccess("");
-
-    try {
-      const response = await fetch(`/api/properties/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim(),
-          price: Number(price),
-          locationId,
-          distanceToCampus: distanceToCampus ? Number(distanceToCampus) : null,
-          amenities,
-          vacantUnits: Number(vacantUnits),
-        }),
-      });
-
-      const payload = await response.json();
-      if (!response.ok || !payload.success) {
-        throw new Error(payload.error || "Failed to update property.");
-      }
-
-      setSuccess("Property updated and resubmitted for admin review.");
-      setTimeout(() => router.push("/landlord"), 2000);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save changes.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  if (isLoading) {
-    return <div className="text-center py-16 text-gray-500">Loading property...</div>;
-  }
-
-  if (!property) {
-    return (
-      <div className="text-center py-16">
-        <p className="text-red-500 mb-4">{error || "Property not found."}</p>
-        <Link href="/landlord" className="text-[#192F59] hover:underline">← Back to dashboard</Link>
-      </div>
-    );
-  }
+  const l = listingById(id) || listingById("uro-sc")!;
+  const [d, setD] = useState<EditData>({ title: l.title, type: l.type, units: l.vacant, gender: l.gender, desc: l.desc, area: l.area, price: l.price, agency: 0, caution: 0, landmark: l.landmark, amenities: l.amenities });
+  const set = (k: keyof EditData, v: string | number) => setD((p) => ({ ...p, [k]: v }));
+  const toggleAmen = (a: string) => setD((p) => ({ ...p, amenities: p.amenities.includes(a) ? p.amenities.filter((x) => x !== a) : [...p.amenities, a] }));
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="mb-8 flex items-center gap-4">
-        <Link href="/landlord" className="flex items-center gap-2 text-gray-500 hover:text-gray-700 transition-colors">
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold text-navy">Edit Property</h1>
-          <p className="text-gray-500 text-sm mt-0.5">Changes will reset the listing to PENDING for re-review.</p>
+    <div style={{ background: T.paper, minHeight: "100vh" }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 40, background: "rgba(244,238,228,.9)", backdropFilter: "blur(10px)", borderBottom: "1px solid " + T.line2 }}>
+        <div style={{ maxWidth: 1000, margin: "0 auto", padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div onClick={() => go("home")} style={{ cursor: "pointer" }}><Logo size={24} fontSize={20} /></div>
+          <span onClick={() => go("manage", l.id)} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: T.sans, fontSize: 13.5, color: T.ink2, cursor: "pointer" }}>{I.arrowLeft({ width: 16, height: 16 })}Back to listing</span>
         </div>
       </div>
+      <div style={{ maxWidth: 720, margin: "0 auto", padding: mobile ? "20px" : "32px 24px 56px" }}>
+        <h1 style={{ fontFamily: T.serif, fontWeight: 400, fontSize: mobile ? 30 : 40, letterSpacing: "-.02em", color: T.ink, margin: 0 }}>Edit listing</h1>
+        <p style={{ fontFamily: T.sans, fontSize: 14.5, color: T.ink2, marginTop: 8 }}>Changes are re-checked by our admin team before going live.</p>
 
-      {error && (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
-      )}
-      {success && (
-        <div className="mb-6 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{success}</div>
-      )}
-
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm p-6 space-y-6">
-        {/* Title */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Property Title</label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#192F59]/20"
-            placeholder="e.g. Cozy Self-Contain Near BOUESTI"
-          />
-        </div>
-
-        {/* Description */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            required
-            rows={5}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#192F59]/20 resize-none"
-            placeholder="Describe the property in detail..."
-          />
-        </div>
-
-        {/* Price + Vacant Units */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Annual Rent (₦)</label>
-            <input
-              type="number"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              required
-              min={1}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#192F59]/20"
-              placeholder="e.g. 150000"
-            />
+        <Card pad={mobile ? 22 : 28} style={{ marginTop: 22 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <Field label="Property title"><Input value={d.title} onChange={(e) => set("title", e.target.value)} /></Field>
+            <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: 14 }}>
+              <Field label="Property type"><Select value={d.type} onChange={(e) => set("type", e.target.value)}>{PROPERTY_TYPES.map((t) => <option key={t}>{t}</option>)}</Select></Field>
+              <Field label="Vacant units"><Input type="number" min="1" value={d.units} onChange={(e) => set("units", e.target.value)} /></Field>
+            </div>
+            <Field label="Who can rent?">
+              <div style={{ display: "flex", gap: 10 }}>{["Any", "Female", "Male"].map((g) => <div key={g} onClick={() => set("gender", g)} style={{ flex: 1, textAlign: "center", padding: "11px", borderRadius: 11, cursor: "pointer", fontFamily: T.sans, fontSize: 14, fontWeight: 600, background: d.gender === g ? T.clay : "#fff", color: d.gender === g ? "#fff" : T.ink2, border: "1px solid " + (d.gender === g ? T.clay : T.line) }}>{g}</div>)}</div>
+            </Field>
+            <Field label="Description"><Textarea value={d.desc} onChange={(e) => set("desc", e.target.value)} /></Field>
+            <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: 14 }}>
+              <Field label="Area / neighbourhood"><Select value={d.area} onChange={(e) => set("area", e.target.value)}>{AREAS.map((a) => <option key={a}>{a}</option>)}</Select></Field>
+              <Field label="Rent / year (₦)"><Input type="number" value={d.price} onChange={(e) => set("price", e.target.value)} /></Field>
+            </div>
+            <Field label="Landmark / directions"><Input value={d.landmark} onChange={(e) => set("landmark", e.target.value)} /></Field>
+            <div>
+              <div style={{ fontFamily: T.sans, fontSize: 12.5, fontWeight: 600, color: T.ink2, marginBottom: 10 }}>Amenities</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {Object.values(AMENITY_GROUPS).flat().map((a) => { const on = d.amenities.includes(a); return (
+                  <span key={a} onClick={() => toggleAmen(a)} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 13px", borderRadius: 999, cursor: "pointer", fontFamily: T.sans, fontSize: 13, fontWeight: 600, background: on ? T.clay : "#fff", color: on ? "#fff" : T.ink2, border: "1px solid " + (on ? T.clay : T.line) }}>{amenityIcon(a, { width: 13, height: 13 })}{a}</span>
+                ); })}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontFamily: T.sans, fontSize: 12.5, fontWeight: 600, color: T.ink2, marginBottom: 8 }}>Photos</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+                {[0, 1, 2].map((i) => <div key={i} style={{ aspectRatio: "1", borderRadius: 12, overflow: "hidden" }}><Photo from={l.from} to={l.to} seed={i} tag={false} /></div>)}
+                <div style={{ aspectRatio: "1", borderRadius: 12, border: "1.5px dashed " + T.line, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer", color: T.ink2, background: "#fff" }}>{I.plus({ width: 22, height: 22 })}<span style={{ fontFamily: T.sans, fontSize: 11 }}>Add</span></div>
+              </div>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Vacant Units</label>
-            <input
-              type="number"
-              value={vacantUnits}
-              onChange={(e) => setVacantUnits(e.target.value)}
-              min={0}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#192F59]/20"
-            />
-          </div>
+        </Card>
+        <div style={{ display: "flex", gap: 12, marginTop: 22, justifyContent: "flex-end" }}>
+          <Button variant="outline" onClick={() => go("manage", l.id)}>Cancel</Button>
+          <Button variant="dark" icon={I.check} onClick={() => { showToast("Listing updated — sent for review"); go("manage", l.id); }}>Save changes</Button>
         </div>
-
-        {/* Location + Distance */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
-            <select
-              value={locationId}
-              onChange={(e) => setLocationId(e.target.value)}
-              required
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#192F59]/20 bg-white"
-            >
-              <option value="">Select location</option>
-              {locations.map((loc) => (
-                <option key={loc.id} value={loc.id}>{loc.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Distance to Campus (km)</label>
-            <input
-              type="number"
-              value={distanceToCampus}
-              onChange={(e) => setDistanceToCampus(e.target.value)}
-              min={0}
-              step={0.1}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#192F59]/20"
-              placeholder="e.g. 0.5"
-            />
-          </div>
-        </div>
-
-        {/* Amenities */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Amenities</label>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {AMENITY_OPTIONS.map((amenity) => (
-              <label key={amenity} className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={amenities.includes(amenity)}
-                  onChange={() => toggleAmenity(amenity)}
-                  className="rounded border-gray-300 text-[#192F59]"
-                />
-                <span className="text-sm text-gray-700">{amenity}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* Note about images */}
-        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
-          <strong>Note:</strong> To change property photos or videos, please contact support or delete and re-list the property. Only details above can be edited here.
-        </div>
-
-        {/* Submit */}
-        <div className="flex items-center justify-between pt-2">
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={isDeleting || isSaving}
-            className="flex items-center gap-2 text-red-500 hover:text-red-600 disabled:opacity-50 border border-red-200 hover:bg-red-50 px-4 py-2.5 rounded-lg font-medium text-sm transition-colors"
-          >
-            <Trash2 className="w-4 h-4" />
-            {isDeleting ? "Deleting..." : "Delete Property"}
-          </button>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/landlord"
-              className="border border-gray-300 text-gray-700 px-5 py-2.5 rounded-lg font-medium text-sm hover:bg-gray-50 transition-colors"
-            >
-              Cancel
-            </Link>
-            <button
-              type="submit"
-              disabled={isSaving || isDeleting}
-              className="flex items-center gap-2 bg-[#192F59] hover:bg-[#14264a] disabled:opacity-50 text-white px-6 py-2.5 rounded-lg font-medium text-sm transition-colors"
-            >
-              <Save className="w-4 h-4" />
-              {isSaving ? "Saving..." : "Save Changes"}
-            </button>
-          </div>
-        </div>
-      </form>
+      </div>
     </div>
   );
 }

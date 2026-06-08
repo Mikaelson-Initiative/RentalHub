@@ -1,299 +1,88 @@
-import Link from "next/link";
+"use client";
 
-// NOTE: Landlord listing data is served by the backend API (separate repo).
-// This page renders the UI shell with placeholder content until the API is wired up.
+import { useParams } from "next/navigation";
+import { T, naira, I, Photo, Logo } from "@/lib/rh/theme";
+import { listingById, LANDLORD_REQUESTS } from "@/lib/rh/data";
+import { useApp, useViewport } from "@/components/rh/app";
+import { Button, Card, Avatar, StatusBadge } from "@/components/rh/ui";
 
-interface LandlordPropertyDetailsPageProps {
-  params: Promise<{
-    id: string;
-  }>;
+function LordBar({ label = "Back to dashboard", onBack }: { label?: string; onBack: () => void }) {
+  const { go } = useApp();
+  return (
+    <div style={{ position: "sticky", top: 0, zIndex: 40, background: "rgba(244,238,228,.9)", backdropFilter: "blur(10px)", borderBottom: "1px solid " + T.line2 }}>
+      <div style={{ maxWidth: 1000, margin: "0 auto", padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div onClick={() => go("home")} style={{ cursor: "pointer" }}><Logo size={24} fontSize={20} /></div>
+        <span onClick={onBack} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: T.sans, fontSize: 13.5, color: T.ink2, cursor: "pointer" }}>{I.arrowLeft({ width: 16, height: 16 })}{label}</span>
+      </div>
+    </div>
+  );
 }
 
-interface MediaItem {
-  id: string;
-  type: string;
-  name: string;
-  url?: string;
-  mimeType?: string;
-  size?: number;
-}
-
-const isPdfFile = (mediaItem: MediaItem) =>
-  mediaItem.mimeType === "application/pdf" || mediaItem.url?.toLowerCase().endsWith(".pdf");
-
-const isVideoFile = (mediaItem: MediaItem) =>
-  mediaItem.type === "video" || mediaItem.mimeType?.startsWith("video/");
-
-const isImageFile = (mediaItem: MediaItem) =>
-  mediaItem.type === "image" || mediaItem.mimeType?.startsWith("image/");
-
-const safeHttpUrl = (url: string | undefined): string | undefined => {
-  if (!url) return undefined;
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol === "https:" || parsed.protocol === "http:") {
-      return parsed.toString();
-    }
-  } catch {
-    // noop
-  }
-  return undefined;
-};
-
-export default async function LandlordPropertyDetailsPage({ params }: LandlordPropertyDetailsPageProps) {
-  await params; // route param available for future backend wiring
-
-  // Placeholder content — replace with a call to the backend API.
-  const property = {
-    title: "Listing details unavailable",
-    status: "PENDING" as "PENDING" | "APPROVED" | "REJECTED",
-    location: { name: "—" },
-    price: 0,
-    distanceToCampus: null as number | null,
-    _count: { bookings: 0 },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    reviewedAt: null as string | null,
-    reviewNote: null as string | null,
-    reviewedBy: null as { name: string; email: string } | null,
-    description:
-      "Listing details are served by the backend API, which lives in a separate repository.",
-    bookings: [] as {
-      id: string;
-      status: string;
-      createdAt: string;
-      student: { name: string; email: string };
-    }[],
-  };
-
-  const amenities: unknown[] = [];
-  const rawImages: unknown[] = [];
-
-  const mediaItems: MediaItem[] = rawImages.map((item, index) => {
-    if (typeof item === "string") {
-      return {
-        id: `media-${index}`,
-        type: "image",
-        name: `image-${index + 1}`,
-        url: safeHttpUrl(item),
-      };
-    }
-
-    if (typeof item === "object" && item !== null) {
-      const typedItem = item as {
-        type?: string;
-        name?: string;
-        url?: string;
-        mimeType?: string;
-        size?: number;
-      };
-      return {
-        id: `media-${index}`,
-        type: typedItem.type || "file",
-        name: typedItem.name || `file-${index + 1}`,
-        url: safeHttpUrl(typedItem.url),
-        mimeType: typedItem.mimeType,
-        size: typedItem.size,
-      };
-    }
-
-    return {
-      id: `media-${index}`,
-      type: "file",
-      name: `file-${index + 1}`,
-    };
-  });
-
-  const formatPrice = (price: number | string | { toString(): string }) =>
-    new Intl.NumberFormat("en-NG", {
-      style: "currency",
-      currency: "NGN",
-      maximumFractionDigits: 0,
-    }).format(Number(price));
+export default function LandlordManagePage() {
+  const { go, showToast } = useApp();
+  const { mobile } = useViewport();
+  const { id } = useParams<{ id: string }>();
+  const l = listingById(id) || listingById("uro-sc")!;
+  const reqs = LANDLORD_REQUESTS.filter((r) => r.listingId === l.id);
+  const stats: [string, string, (p?: Record<string, unknown>) => React.ReactElement][] = [["Views this month", "184", I.eye], ["Tenant requests", String(reqs.length), I.inbox], ["Times booked", "3", I.checkCircle]];
 
   return (
-    <div className="min-h-screen bg-gray-50 py-10 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-5xl mx-auto">
-        <Link href="/landlord" className="text-sm text-[#E67E22] hover:underline">
-          Back to Landlord Dashboard
-        </Link>
-
-        <div className="mt-4 bg-white rounded-2xl border border-gray-200 shadow-sm p-6 sm:p-8">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-3xl font-bold text-[#192F59]">{property.title}</h1>
-            <span
-              className={`px-3 py-1 rounded-full text-sm font-medium ${
-                property.status === "APPROVED"
-                  ? "bg-green-100 text-green-800"
-                  : property.status === "PENDING"
-                  ? "bg-yellow-100 text-yellow-800"
-                  : "bg-red-100 text-red-800"
-              }`}
-            >
-              {property.status}
-            </span>
+    <div style={{ background: T.paper, minHeight: "100vh" }}>
+      <LordBar onBack={() => go("landlord")} />
+      <div style={{ maxWidth: 1000, margin: "0 auto", padding: mobile ? "20px" : "32px 24px 56px" }}>
+        <Card pad={0} style={{ overflow: "hidden" }}>
+          <div style={{ position: "relative", height: mobile ? 180 : 240 }}>
+            <Photo from={l.from} to={l.to} label={l.area} />
+            <span style={{ position: "absolute", top: 14, left: 14 }}><StatusBadge status="APPROVED" style={{ background: "rgba(255,255,255,.95)" }} /></span>
           </div>
-
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-            <div className="space-y-2">
-              <p>
-                <span className="font-semibold text-gray-800">Location:</span> {property.location.name}
-              </p>
-              <p>
-                <span className="font-semibold text-gray-800">Price:</span> {formatPrice(property.price)}
-              </p>
-              <p>
-                <span className="font-semibold text-gray-800">Distance to campus:</span>{" "}
-                {property.distanceToCampus ? `${property.distanceToCampus} km` : "Not provided"}
-              </p>
-              <p>
-                <span className="font-semibold text-gray-800">Total booking requests:</span> {property._count.bookings}
-              </p>
+          <div style={{ padding: mobile ? 20 : 26 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontFamily: T.sans, fontSize: 13, color: T.ink2, display: "flex", alignItems: "center", gap: 5 }}>{I.pin({ width: 13, height: 13 })}{l.area} · {l.dist} km to gate</div>
+                <h1 style={{ fontFamily: T.serif, fontWeight: 400, fontSize: mobile ? 28 : 38, letterSpacing: "-.02em", color: T.ink, margin: "6px 0 0", lineHeight: 1.05 }}>{l.title}</h1>
+                <div style={{ fontFamily: T.serif, fontSize: 24, fontWeight: 600, color: T.clay, marginTop: 8 }}>{naira(l.price)}<span style={{ fontFamily: T.sans, fontSize: 13, color: T.ink2, fontWeight: 400 }}> /year</span></div>
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <Button variant="outline" icon={I.eye} onClick={() => go("property", l.id)}>View public</Button>
+                <Button icon={I.doc} onClick={() => go("edit-property", l.id)}>Edit listing</Button>
+              </div>
             </div>
-            <div className="space-y-2">
-              <p>
-                <span className="font-semibold text-gray-800">Submitted:</span>{" "}
-                {new Date(property.createdAt).toLocaleString()}
-              </p>
-              <p>
-                <span className="font-semibold text-gray-800">Last updated:</span>{" "}
-                {new Date(property.updatedAt).toLocaleString()}
-              </p>
-              {property.reviewedAt && (
-                <p>
-                  <span className="font-semibold text-gray-800">Last reviewed:</span>{" "}
-                  {new Date(property.reviewedAt).toLocaleString()}
-                </p>
-              )}
+            <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "repeat(3,1fr)", gap: 14, marginTop: 22 }}>
+              {stats.map(([t, v, Ic]) => (
+                <div key={t} style={{ background: T.paper, borderRadius: 14, padding: 16, display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ width: 40, height: 40, borderRadius: 11, background: "#fff", color: T.clay, display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}>{Ic({ width: 19, height: 19 })}</span>
+                  <div><div style={{ fontFamily: T.serif, fontSize: 24, fontWeight: 600, color: T.ink, lineHeight: 1 }}>{v}</div><div style={{ fontFamily: T.sans, fontSize: 12, color: T.ink2, marginTop: 3 }}>{t}</div></div>
+                </div>
+              ))}
             </div>
           </div>
+        </Card>
 
-          <div className="mt-6">
-            <h2 className="text-base font-semibold text-[#192F59]">Description</h2>
-            <p className="mt-2 text-gray-700 whitespace-pre-line">{property.description}</p>
-          </div>
-
-          <div className="mt-6">
-            <h2 className="text-base font-semibold text-[#192F59]">Amenities</h2>
-            {amenities.length === 0 ? (
-              <p className="mt-2 text-sm text-gray-500">No amenities provided.</p>
-            ) : (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {amenities.map((amenity, index) => (
-                  <span key={`${amenity}-${index}`} className="bg-gray-100 text-gray-700 text-xs px-3 py-1.5 rounded-full">
-                    {String(amenity)}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="mt-6">
-            <h2 className="text-base font-semibold text-[#192F59]">Review Notes</h2>
-            {property.reviewedAt ? (
-              <div className="mt-2 text-sm text-gray-700 space-y-1">
-                {property.reviewedBy && (
-                  <p>
-                    Reviewed by: {property.reviewedBy.name} ({property.reviewedBy.email})
-                  </p>
-                )}
-                {property.reviewNote ? (
-                  <p>Note: {property.reviewNote}</p>
-                ) : (
-                  <p>No note was added for this review action.</p>
-                )}
-              </div>
-            ) : (
-              <p className="mt-2 text-sm text-gray-500">Your listing has not been reviewed yet.</p>
-            )}
-          </div>
-
-          <div className="mt-6">
-            <h2 className="text-base font-semibold text-[#192F59]">Uploaded Media</h2>
-            {mediaItems.length === 0 ? (
-              <p className="mt-2 text-sm text-gray-500">No uploaded media found for this listing.</p>
-            ) : (
-              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                {mediaItems.map((mediaItem) => (
-                  <div key={mediaItem.id} className="rounded-md border border-gray-200 p-3">
-                    {mediaItem.url && isImageFile(mediaItem) ? (
-                      <img
-                        src={mediaItem.url}
-                        alt={mediaItem.name}
-                        className="w-full h-44 object-cover rounded-md border border-gray-100"
-                      />
-                    ) : mediaItem.url && isVideoFile(mediaItem) ? (
-                      <video
-                        src={mediaItem.url}
-                        controls
-                        preload="metadata"
-                        className="w-full h-44 rounded-md border border-gray-100 bg-black"
-                      >
-                        Your browser does not support video playback.
-                      </video>
-                    ) : mediaItem.url && isPdfFile(mediaItem) ? (
-                      <iframe
-                        src={mediaItem.url}
-                        title={mediaItem.name}
-                        className="w-full h-44 rounded-md border border-gray-100 bg-white"
-                      />
-                    ) : (
-                      <div className="h-44 rounded-md border border-dashed border-gray-300 bg-gray-50 flex items-center justify-center text-xs text-gray-500 px-3 text-center">
-                        Preview unavailable
-                      </div>
-                    )}
-                    <div className="mt-2 text-sm text-gray-700">
-                      <p className="font-medium">{mediaItem.name}</p>
-                      <p className="text-gray-500">
-                        {mediaItem.type}
-                        {mediaItem.mimeType ? ` • ${mediaItem.mimeType}` : ""}
-                        {typeof mediaItem.size === "number" ? ` • ${(mediaItem.size / 1024).toFixed(1)} KB` : ""}
-                      </p>
-                      {mediaItem.url && (
-                        <div className="mt-1 flex items-center gap-3">
-                          <a
-                            href={mediaItem.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-[#E67E22] hover:underline"
-                          >
-                            Open file
-                          </a>
-                          <a
-                            href={mediaItem.url}
-                            download
-                            className="text-[#192F59] hover:underline"
-                          >
-                            Download
-                          </a>
-                        </div>
-                      )}
-                    </div>
+        <h2 style={{ fontFamily: T.serif, fontWeight: 400, fontSize: mobile ? 24 : 30, color: T.ink, letterSpacing: "-.02em", margin: "30px 0 16px" }}>Tenant requests</h2>
+        {reqs.length === 0 ? (
+          <Card pad={32} style={{ textAlign: "center" }}><div style={{ fontFamily: T.sans, fontSize: 14.5, color: T.ink2 }}>No requests on this listing yet.</div></Card>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {reqs.map((r) => (
+              <Card key={r.id} pad={mobile ? 16 : 18}>
+                <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                  <Avatar landlord={{ initials: r.student.split(" ").map((w) => w[0]).join(""), color: "#3C5A86" }} size={42} />
+                  <div style={{ flex: 1, minWidth: 140 }}>
+                    <div style={{ fontFamily: T.sans, fontSize: 15, fontWeight: 700, color: T.ink }}>{r.student}</div>
+                    <div style={{ fontFamily: T.sans, fontSize: 13, color: T.ink2 }}>Offer <strong style={{ color: T.green }}>{naira(r.bid)}</strong> · {r.createdAt}</div>
                   </div>
-                ))}
-              </div>
-            )}
+                  {r.status === "PENDING"
+                    ? <div style={{ display: "flex", gap: 8 }}><Button variant="danger" size="sm" onClick={() => showToast("Offer declined")}>Decline</Button><Button variant="green" size="sm" onClick={() => showToast("Offer accepted")}>Accept</Button></div>
+                    : <StatusBadge status={r.status} />}
+                </div>
+              </Card>
+            ))}
           </div>
+        )}
 
-          <div className="mt-8 border-t border-gray-200 pt-6">
-            <h2 className="text-base font-semibold text-[#192F59]">Recent Booking Requests</h2>
-            {property.bookings.length === 0 ? (
-              <p className="mt-2 text-sm text-gray-500">No booking requests yet.</p>
-            ) : (
-              <div className="mt-3 space-y-3">
-                {property.bookings.slice(0, 10).map((booking) => (
-                  <div key={booking.id} className="rounded-lg border border-gray-200 p-3 text-sm">
-                    <p className="font-medium text-[#192F59]">
-                      {booking.student.name} ({booking.student.email})
-                    </p>
-                    <p className="text-gray-600">
-                      Status: {booking.status} • {new Date(booking.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+        <div style={{ marginTop: 26, display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Button variant="outline" onClick={() => showToast("Listing paused — hidden from search")}>Pause listing</Button>
+          <Button variant="danger" onClick={() => { showToast("Listing removed"); go("landlord"); }}>Delete listing</Button>
         </div>
       </div>
     </div>

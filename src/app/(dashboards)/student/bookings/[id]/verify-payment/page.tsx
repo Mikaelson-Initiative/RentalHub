@@ -1,105 +1,66 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { CheckCircle, XCircle, Loader2 } from "lucide-react";
-import { Suspense } from "react";
+import { useParams } from "next/navigation";
+import { T, naira, I } from "@/lib/rh/theme";
+import { bookingById, listingById } from "@/lib/rh/data";
+import { useApp, useViewport } from "@/components/rh/app";
+import { Button, Card } from "@/components/rh/ui";
+import { TaskBar } from "@/components/rh/task-bar";
 
-function VerifyPaymentInner() {
+export default function VerifyPaymentPage() {
+  const { go } = useApp();
+  const { mobile } = useViewport();
   const { id } = useParams<{ id: string }>();
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const reference = searchParams.get("reference") ?? searchParams.get("trxref") ?? "";
-
-  const [status, setStatus] = useState<"loading" | "success" | "failed">("loading");
-  const [message, setMessage] = useState("");
+  const bk = bookingById(id);
+  const l = listingById(bk.listingId)!;
+  const total = (bk.bid || l.price) + (bk.agencyFee || 0) + (bk.cautionFee || 0);
+  const [phase, setPhase] = useState<"summary" | "processing" | "success">("summary");
+  const rows: [string, number][] = [["Annual rent", bk.bid || l.price], ["Agency fee", bk.agencyFee || 0], ["Caution fee", bk.cautionFee || 0]];
 
   useEffect(() => {
-    if (!reference) {
-      setStatus("failed");
-      setMessage("No payment reference found.");
-      return;
-    }
-
-    const verify = async () => {
-      try {
-        const res = await fetch(`/api/payments/verify?reference=${encodeURIComponent(reference)}&bookingId=${encodeURIComponent(id)}`);
-        const data = await res.json();
-
-        if (res.ok && data.success) {
-          setStatus("success");
-          setMessage("Payment verified successfully! Your apartment is secured.");
-          setTimeout(() => router.push("/student?tab=bookings"), 3000);
-        } else {
-          setStatus("failed");
-          setMessage(data.error || "Payment verification failed.");
-        }
-      } catch {
-        setStatus("failed");
-        setMessage("An error occurred while verifying your payment.");
-      }
-    };
-
-    verify();
-  }, [reference, id, router]);
+    if (phase === "processing") { const t = setTimeout(() => setPhase("success"), 2200); return () => clearTimeout(t); }
+  }, [phase]);
 
   return (
-    <div className="min-h-[60vh] flex items-center justify-center">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8 text-center">
-        {status === "loading" && (
-          <>
-            <Loader2 className="w-12 h-12 text-[#192F59] animate-spin mx-auto mb-4" />
-            <h2 className="text-xl font-bold text-navy mb-2">Verifying Payment</h2>
-            <p className="text-gray-500 text-sm">Please wait while we confirm your payment with Paystack...</p>
-          </>
-        )}
-
-        {status === "success" && (
-          <>
-            <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
-            <h2 className="text-xl font-bold text-navy mb-2">Payment Successful!</h2>
-            <p className="text-gray-600 text-sm mb-6">{message}</p>
-            <p className="text-xs text-gray-400 mb-4">Redirecting to your dashboard in 3 seconds...</p>
-            <Link
-              href="/student?tab=bookings"
-              className="inline-block bg-[#192F59] hover:bg-[#14264a] text-white px-6 py-3 rounded-xl font-medium text-sm transition-colors"
-            >
-              Go to My Bookings
-            </Link>
-          </>
-        )}
-
-        {status === "failed" && (
-          <>
-            <XCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-bold text-navy mb-2">Payment Failed</h2>
-            <p className="text-gray-600 text-sm mb-6">{message}</p>
-            <div className="flex gap-3 justify-center">
-              <Link
-                href="/student?tab=bookings"
-                className="border border-gray-300 text-gray-700 px-5 py-2.5 rounded-xl font-medium text-sm hover:bg-gray-50 transition-colors"
-              >
-                My Bookings
-              </Link>
-              <button
-                onClick={() => window.history.back()}
-                className="bg-[#192F59] hover:bg-[#14264a] text-white px-5 py-2.5 rounded-xl font-medium text-sm transition-colors"
-              >
-                Try Again
-              </button>
+    <div style={{ background: T.paper, minHeight: "100vh" }}>
+      <TaskBar onBack={() => go("booking", bk.id)} backLabel="Back to booking" />
+      <div style={{ maxWidth: 480, margin: "0 auto", padding: mobile ? "24px 20px 48px" : "40px 24px 56px" }}>
+        {phase === "summary" && (
+          <Card pad={mobile ? 24 : 30}>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, color: T.green, fontFamily: T.sans, fontSize: 13, fontWeight: 600 }}>{I.lock({ width: 16, height: 16 })} Secure escrow payment</div>
+            <h1 style={{ fontFamily: T.serif, fontWeight: 400, fontSize: 30, letterSpacing: "-.02em", color: T.ink, margin: "12px 0 2px" }}>Confirm &amp; pay</h1>
+            <p style={{ fontFamily: T.sans, fontSize: 13.5, color: T.ink2, margin: 0 }}>{l.title} · {l.area}</p>
+            <div style={{ marginTop: 22, display: "flex", flexDirection: "column", gap: 10 }}>
+              {rows.filter((r) => r[1]).map(([t, v]) => (
+                <div key={t} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontFamily: T.sans, fontSize: 14, color: T.ink2 }}><span style={{ whiteSpace: "nowrap" }}>{t}</span><span style={{ color: T.ink, fontWeight: 600, whiteSpace: "nowrap" }}>{naira(v)}</span></div>
+              ))}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, borderTop: "1px solid " + T.line, paddingTop: 12, marginTop: 4 }}><span style={{ fontFamily: T.sans, fontSize: 14, color: T.ink, whiteSpace: "nowrap" }}>Total due</span><span style={{ fontFamily: T.serif, fontSize: 28, fontWeight: 700, color: T.ink, whiteSpace: "nowrap" }}>{naira(total)}</span></div>
             </div>
-          </>
+            <div style={{ marginTop: 22 }}><Button full size="lg" icon={I.wallet} onClick={() => setPhase("processing")}>Pay with Paystack</Button></div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginTop: 14, fontFamily: T.sans, fontSize: 12, color: T.ink2 }}>{I.shield({ width: 14, height: 14 })} Held safely until you confirm move-in</div>
+          </Card>
+        )}
+        {phase === "processing" && (
+          <Card pad={mobile ? 30 : 40} style={{ textAlign: "center" }}>
+            <div style={{ width: 56, height: 56, margin: "0 auto 18px", borderRadius: 999, border: "4px solid " + T.claySoft, borderTopColor: T.clay, animation: "rhspin 0.8s linear infinite" }} />
+            <h2 style={{ fontFamily: T.serif, fontWeight: 500, fontSize: 24, color: T.ink, margin: 0 }}>Verifying payment</h2>
+            <p style={{ fontFamily: T.sans, fontSize: 14, color: T.ink2, marginTop: 8 }}>Confirming with Paystack — just a moment…</p>
+            <style>{"@keyframes rhspin{to{transform:rotate(360deg)}}"}</style>
+          </Card>
+        )}
+        {phase === "success" && (
+          <Card pad={mobile ? 28 : 36} style={{ textAlign: "center" }}>
+            <div style={{ width: 64, height: 64, margin: "0 auto 18px", borderRadius: 999, background: T.greenSoft, color: T.green, display: "flex", alignItems: "center", justifyContent: "center" }}>{I.checkCircle({ width: 32, height: 32 })}</div>
+            <h2 style={{ fontFamily: T.serif, fontWeight: 400, fontSize: 30, letterSpacing: "-.02em", color: T.ink, margin: 0 }}>Payment successful!</h2>
+            <p style={{ fontFamily: T.sans, fontSize: 14.5, color: T.ink2, lineHeight: 1.55, marginTop: 10 }}>Your home is secured. We&apos;re holding {naira(total)} safely and will release it to your landlord once you confirm move-in.</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 22 }}>
+              <Button full size="lg" variant="dark" icon={I.doc} onClick={() => go("receipt", bk.id)}>View receipt</Button>
+              <Button full variant="outline" onClick={() => go("student")}>Go to my bookings</Button>
+            </div>
+          </Card>
         )}
       </div>
     </div>
-  );
-}
-
-export default function VerifyPaymentPage() {
-  return (
-    <Suspense fallback={<div className="text-center py-16 text-gray-500">Loading...</div>}>
-      <VerifyPaymentInner />
-    </Suspense>
   );
 }

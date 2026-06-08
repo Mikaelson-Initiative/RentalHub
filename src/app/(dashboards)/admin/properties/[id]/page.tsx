@@ -1,275 +1,82 @@
-import Link from "next/link";
-import ReviewActions from "./ReviewActions";
+"use client";
 
-// NOTE: Admin review data is served by the backend API (separate repo).
-// This page renders the UI shell with placeholder content until the API is wired up.
+import { useState } from "react";
+import { useParams } from "next/navigation";
+import { T, naira, I, Photo, Logo, amenityIcon } from "@/lib/rh/theme";
+import { pendingById } from "@/lib/rh/data";
+import { useApp, useViewport } from "@/components/rh/app";
+import { Button, Card, StatusBadge, Textarea } from "@/components/rh/ui";
 
-interface AdminPropertyReviewPageProps {
-  params: Promise<{
-    id: string;
-  }>;
-}
-
-interface MediaItem {
-  id: string;
-  type: string;
-  name: string;
-  url?: string;
-  mimeType?: string;
-  size?: number;
-}
-
-const isPdfFile = (mediaItem: MediaItem) =>
-  mediaItem.mimeType === "application/pdf" || mediaItem.url?.toLowerCase().endsWith(".pdf");
-
-const isVideoFile = (mediaItem: MediaItem) =>
-  mediaItem.type === "video" || mediaItem.mimeType?.startsWith("video/");
-
-const isImageFile = (mediaItem: MediaItem) =>
-  mediaItem.type === "image" || mediaItem.mimeType?.startsWith("image/");
-
-const safeHttpUrl = (url: string | undefined): string | undefined => {
-  if (!url) return undefined;
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol === "https:" || parsed.protocol === "http:") {
-      return parsed.toString();
-    }
-  } catch {
-    // noop
-  }
-  return undefined;
-};
-
-export default async function AdminPropertyReviewPage({ params }: AdminPropertyReviewPageProps) {
-  const { id } = await params;
-
-  // Placeholder content — replace with a call to the backend API.
-  const property = {
-    id,
-    title: "Listing details unavailable",
-    status: "PENDING" as "PENDING" | "APPROVED" | "REJECTED",
-    location: { name: "—" },
-    price: 0,
-    distanceToCampus: null as number | null,
-    _count: { bookings: 0 },
-    landlord: { name: "—", email: "—", verificationStatus: "UNVERIFIED" as const },
-    createdAt: new Date().toISOString(),
-    description:
-      "Listing details are served by the backend API, which lives in a separate repository.",
-    reviewedAt: null as string | null,
-    reviewedBy: null as { name: string; email: string } | null,
-    reviewNote: null as string | null,
-  };
-
-  const amenities: unknown[] = [];
-  const rawImages: unknown[] = [];
-
-  const mediaItems: MediaItem[] = rawImages.map((item, index) => {
-    if (typeof item === "string") {
-      return {
-        id: `media-${index}`,
-        type: "image",
-        name: `image-${index + 1}`,
-        url: safeHttpUrl(item),
-      };
-    }
-
-    if (typeof item === "object" && item !== null) {
-      const typedItem = item as {
-        type?: string;
-        name?: string;
-        url?: string;
-        mimeType?: string;
-        size?: number;
-      };
-      return {
-        id: `media-${index}`,
-        type: typedItem.type || "file",
-        name: typedItem.name || `file-${index + 1}`,
-        url: safeHttpUrl(typedItem.url),
-        mimeType: typedItem.mimeType,
-        size: typedItem.size,
-      };
-    }
-
-    return {
-      id: `media-${index}`,
-      type: "file",
-      name: `file-${index + 1}`,
-    };
-  });
+export default function AdminPropertyReviewPage() {
+  const { go, showToast } = useApp();
+  const { mobile } = useViewport();
+  const { id } = useParams<{ id: string }>();
+  const p = pendingById(id);
+  const [reason, setReason] = useState("");
+  const amenities = ["Borehole", "Prepaid meter", "Tiled floors", "Gated compound", "Parking space"];
+  const desc = `A ${p.title.toLowerCase()} in ${p.area}, submitted for review. Newly finished and marketed to students near campus. Landlord reports steady water and power backup.`;
+  const aiTone = p.aiScore === "PASS" ? "green" : p.aiScore === "FAIL" ? "red" : "gold";
+  const facts: [string, string][] = [["Location", p.area], ["Price", naira(p.price) + "/yr"], ["Distance to campus", "0.8 km"], ["Existing bookings", "0"]];
+  const meta: [string, string][] = [["Landlord", p.landlord], ["Landlord status", "Under review"], ["Media items", String(p.media)], ["Submitted", p.submitted]];
 
   return (
-    <div className="min-h-screen bg-gray-50 py-10 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-5xl mx-auto">
-        <Link href="/admin" className="text-sm text-[#E67E22] hover:underline">
-          Back to Admin Queue
-        </Link>
-
-        <div className="mt-4 bg-white rounded-2xl border border-gray-200 shadow-sm p-6 sm:p-8">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-3xl font-bold text-[#192F59]">{property.title}</h1>
-            <span
-              className={`px-3 py-1 rounded-full text-sm font-medium ${
-                property.status === "APPROVED"
-                  ? "bg-green-100 text-green-800"
-                  : property.status === "PENDING"
-                  ? "bg-yellow-100 text-yellow-800"
-                  : "bg-red-100 text-red-800"
-              }`}
-            >
-              {property.status}
-            </span>
-          </div>
-
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-            <div className="space-y-2">
-              <p>
-                <span className="font-semibold text-gray-800">Location:</span> {property.location.name}
-              </p>
-              <p>
-                <span className="font-semibold text-gray-800">Price:</span>{" "}
-                {new Intl.NumberFormat("en-NG", {
-                  style: "currency",
-                  currency: "NGN",
-                  maximumFractionDigits: 0,
-                }).format(Number(property.price))}
-              </p>
-              <p>
-                <span className="font-semibold text-gray-800">Distance to campus:</span>{" "}
-                {property.distanceToCampus ? `${property.distanceToCampus} km` : "Not provided"}
-              </p>
-              <p>
-                <span className="font-semibold text-gray-800">Bookings:</span> {property._count.bookings}
-              </p>
-            </div>
-            <div className="space-y-2">
-              <p>
-                <span className="font-semibold text-gray-800">Landlord:</span> {property.landlord.name}
-              </p>
-              <p>
-                <span className="font-semibold text-gray-800">Email:</span> {property.landlord.email}
-              </p>
-              <p>
-                <span className="font-semibold text-gray-800">Landlord Status:</span>{" "}
-                {property.landlord.verificationStatus}
-              </p>
-              <p>
-                <span className="font-semibold text-gray-800">Submitted:</span>{" "}
-                {new Date(property.createdAt).toLocaleString()}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-6">
-            <h2 className="text-base font-semibold text-[#192F59]">Description</h2>
-            <p className="mt-2 text-gray-700 whitespace-pre-line">{property.description}</p>
-          </div>
-
-          <div className="mt-6">
-            <h2 className="text-base font-semibold text-[#192F59]">Amenities</h2>
-            {amenities.length === 0 ? (
-              <p className="mt-2 text-sm text-gray-500">No amenities provided.</p>
-            ) : (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {amenities.map((amenity, index) => (
-                  <span key={`${amenity}-${index}`} className="bg-gray-100 text-gray-700 text-xs px-3 py-1.5 rounded-full">
-                    {String(amenity)}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="mt-6">
-            <h2 className="text-base font-semibold text-[#192F59]">Review History</h2>
-            {property.reviewedAt ? (
-              <div className="mt-2 text-sm text-gray-700 space-y-1">
-                <p>
-                  Last reviewed: {new Date(property.reviewedAt).toLocaleString()}
-                </p>
-                {property.reviewedBy && (
-                  <p>
-                    Reviewed by: {property.reviewedBy.name} ({property.reviewedBy.email})
-                  </p>
-                )}
-                {property.reviewNote && <p>Note: {property.reviewNote}</p>}
-              </div>
-            ) : (
-              <p className="mt-2 text-sm text-gray-500">No review decision has been recorded yet.</p>
-            )}
-          </div>
-
-          <div className="mt-6">
-            <h2 className="text-base font-semibold text-[#192F59]">Uploaded Media</h2>
-            {mediaItems.length === 0 ? (
-              <p className="mt-2 text-sm text-gray-500">No file metadata available.</p>
-            ) : (
-              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                {mediaItems.map((mediaItem) => (
-                  <div key={mediaItem.id} className="rounded-md border border-gray-200 p-3">
-                    {mediaItem.url && isImageFile(mediaItem) ? (
-                      <img
-                        src={mediaItem.url}
-                        alt={mediaItem.name}
-                        className="w-full h-44 object-cover rounded-md border border-gray-100"
-                      />
-                    ) : mediaItem.url && isVideoFile(mediaItem) ? (
-                      <video
-                        src={mediaItem.url}
-                        controls
-                        preload="metadata"
-                        className="w-full h-44 rounded-md border border-gray-100 bg-black"
-                      >
-                        Your browser does not support video playback.
-                      </video>
-                    ) : mediaItem.url && isPdfFile(mediaItem) ? (
-                      <iframe
-                        src={mediaItem.url}
-                        title={mediaItem.name}
-                        className="w-full h-44 rounded-md border border-gray-100 bg-white"
-                      />
-                    ) : (
-                      <div className="h-44 rounded-md border border-dashed border-gray-300 bg-gray-50 flex items-center justify-center text-xs text-gray-500 px-3 text-center">
-                        Preview unavailable
-                      </div>
-                    )}
-                    <div className="mt-2 text-sm text-gray-700">
-                      <p className="font-medium">{mediaItem.name}</p>
-                      <p className="text-gray-500">
-                        {mediaItem.type}
-                        {mediaItem.mimeType ? ` • ${mediaItem.mimeType}` : ""}
-                        {typeof mediaItem.size === "number" ? ` • ${(mediaItem.size / 1024).toFixed(1)} KB` : ""}
-                      </p>
-                      {mediaItem.url && (
-                        <div className="mt-1 flex items-center gap-3">
-                          <a
-                            href={mediaItem.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-[#E67E22] hover:underline"
-                          >
-                            Open file
-                          </a>
-                          <a
-                            href={mediaItem.url}
-                            download
-                            className="text-[#192F59] hover:underline"
-                          >
-                            Download
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <ReviewActions propertyId={property.id} />
+    <div style={{ background: T.paper, minHeight: "100vh" }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 40, background: "rgba(244,238,228,.9)", backdropFilter: "blur(10px)", borderBottom: "1px solid " + T.line2 }}>
+        <div style={{ maxWidth: 1000, margin: "0 auto", padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div onClick={() => go("home")} style={{ cursor: "pointer" }}><Logo size={24} fontSize={20} /></div>
+          <span onClick={() => go("admin")} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: T.sans, fontSize: 13.5, color: T.ink2, cursor: "pointer" }}>{I.arrowLeft({ width: 16, height: 16 })}Back to admin queue</span>
         </div>
+      </div>
+
+      <div style={{ maxWidth: 1000, margin: "0 auto", padding: mobile ? "20px" : "32px 24px 56px" }}>
+        <Card pad={mobile ? 22 : 30}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 14, flexWrap: "wrap", alignItems: "flex-start" }}>
+            <h1 style={{ fontFamily: T.serif, fontWeight: 400, fontSize: mobile ? 28 : 38, letterSpacing: "-.02em", color: T.ink, margin: 0, lineHeight: 1.05 }}>{p.title}</h1>
+            <StatusBadge status="PENDING" />
+          </div>
+
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginTop: 18, padding: 16, borderRadius: 14, background: aiTone === "green" ? T.greenSoft : aiTone === "red" ? T.redSoft : T.goldSoft }}>
+            <span style={{ color: aiTone === "green" ? T.green : aiTone === "red" ? T.red : T.gold, flex: "0 0 auto", marginTop: 1 }}>{I.sparkle({ width: 20, height: 20 })}</span>
+            <div><div style={{ fontFamily: T.sans, fontSize: 13.5, fontWeight: 700, color: aiTone === "green" ? T.green : aiTone === "red" ? T.red : T.gold }}>AI pre-screen: {p.aiScore}</div><div style={{ fontFamily: T.sans, fontSize: 13, color: T.ink2, marginTop: 3, lineHeight: 1.5 }}>{p.aiNote}</div></div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: mobile ? 16 : 28, marginTop: 22 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {facts.map(([k, v]) => <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 16, fontFamily: T.sans, fontSize: 14 }}><span style={{ color: T.ink2 }}>{k}</span><span style={{ color: T.ink, fontWeight: 600, whiteSpace: "nowrap", textAlign: "right" }}>{v}</span></div>)}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {meta.map(([k, v]) => <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 16, fontFamily: T.sans, fontSize: 14 }}><span style={{ color: T.ink2 }}>{k}</span><span style={{ color: T.ink, fontWeight: 600, whiteSpace: "nowrap", textAlign: "right" }}>{v}</span></div>)}
+            </div>
+          </div>
+
+          <div style={{ marginTop: 24 }}>
+            <h2 style={{ fontFamily: T.serif, fontWeight: 500, fontSize: 20, color: T.ink, margin: "0 0 8px" }}>Description</h2>
+            <p style={{ fontFamily: T.sans, fontSize: 14.5, color: T.ink2, lineHeight: 1.6, margin: 0 }}>{desc}</p>
+          </div>
+
+          <div style={{ marginTop: 22 }}>
+            <h2 style={{ fontFamily: T.serif, fontWeight: 500, fontSize: 20, color: T.ink, margin: "0 0 12px" }}>Amenities</h2>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {amenities.map((a) => <span key={a} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: T.sans, fontSize: 12.5, color: T.ink2, background: T.paper, padding: "6px 11px", borderRadius: 999 }}>{amenityIcon(a, { width: 13, height: 13 })}{a}</span>)}
+            </div>
+          </div>
+
+          <div style={{ marginTop: 24 }}>
+            <h2 style={{ fontFamily: T.serif, fontWeight: 500, fontSize: 20, color: T.ink, margin: "0 0 12px" }}>Uploaded media <span style={{ fontFamily: T.sans, fontSize: 13, color: T.ink3, fontWeight: 400 }}>({p.media} items)</span></h2>
+            <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2,1fr)" : "repeat(4,1fr)", gap: 10 }}>
+              {Array.from({ length: Math.min(p.media, 8) }).map((_, i) => <div key={i} style={{ aspectRatio: "4/3", borderRadius: 12, overflow: "hidden" }}><Photo seed={i + p.id.length} tag={false} /></div>)}
+            </div>
+          </div>
+
+          <div style={{ marginTop: 26, borderTop: "1px solid " + T.line, paddingTop: 22 }}>
+            <h2 style={{ fontFamily: T.serif, fontWeight: 500, fontSize: 20, color: T.ink, margin: "0 0 12px" }}>Review decision</h2>
+            <Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (required when rejecting) — shared with the landlord" style={{ minHeight: 72 }} />
+            <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <Button variant="danger" icon={I.x} onClick={() => { if (!reason.trim()) { showToast("Add a reason before rejecting"); return; } showToast("Listing rejected — landlord notified"); go("admin"); }}>Reject listing</Button>
+              <Button variant="green" icon={I.check} onClick={() => { showToast("Listing approved & published"); go("admin"); }}>Approve listing</Button>
+            </div>
+          </div>
+        </Card>
       </div>
     </div>
   );
