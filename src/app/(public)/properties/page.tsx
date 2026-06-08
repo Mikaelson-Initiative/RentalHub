@@ -1,9 +1,10 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { T, shortNaira, I } from "@/lib/rh/theme";
-import { LISTINGS, AREAS, PROPERTY_TYPES, AMENITY_GROUPS } from "@/lib/rh/data";
+import { AREAS, PROPERTY_TYPES, AMENITY_GROUPS } from "@/lib/rh/data";
+import { apiGet, mapProperty, type UiListing, type ApiListResponse } from "@/lib/rh/api";
 import { useApp, useViewport } from "@/components/rh/app";
 import { Button, Card, Select, PropertyCard, PublicNav, Footer } from "@/components/rh/ui";
 
@@ -61,9 +62,21 @@ function SearchInner() {
   const [f, setF] = useState<Filters>({ ...EMPTY, area: sp.get("area") });
   const [sort, setSort] = useState("featured");
   const [showFilters, setShowFilters] = useState(false);
+  const [all, setAll] = useState<UiListing[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    apiGet<ApiListResponse>("/api/properties?pageSize=50")
+      .then((r) => { if (active) setAll(r.items.map(mapProperty)); })
+      .catch((e) => { if (active) setError(e instanceof Error ? e.message : "Failed to load"); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
 
   const results = useMemo(() => {
-    let r = LISTINGS.filter((l) =>
+    let r = all.filter((l) =>
       (!f.area || l.area === f.area) &&
       (!f.type || l.type === f.type) &&
       l.price <= f.maxPrice &&
@@ -75,7 +88,7 @@ function SearchInner() {
     else if (sort === "distance") r = [...r].sort((a, b) => a.dist - b.dist);
     else r = [...r].sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));
     return r;
-  }, [f, sort]);
+  }, [all, f, sort]);
 
   const activeCount = (f.area ? 1 : 0) + (f.type ? 1 : 0) + (f.gender ? 1 : 0) + f.amenities.length + (f.maxPrice < 450000 ? 1 : 0);
 
@@ -126,7 +139,17 @@ function SearchInner() {
             )}
           </div>
 
-          {results.length === 0 ? (
+          {loading ? (
+            <Card pad={48} style={{ textAlign: "center" }}>
+              <div style={{ fontFamily: T.sans, fontSize: 14.5, color: T.ink2 }}>Loading homes…</div>
+            </Card>
+          ) : error ? (
+            <Card pad={48} style={{ textAlign: "center" }}>
+              <div style={{ width: 56, height: 56, borderRadius: 16, background: T.redSoft, color: T.red, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>{I.shieldAlert({ width: 26, height: 26 })}</div>
+              <div style={{ fontFamily: T.serif, fontSize: 22, color: T.ink }}>Couldn&apos;t load homes</div>
+              <p style={{ fontFamily: T.sans, fontSize: 14, color: T.ink2, marginTop: 8 }}>{error}</p>
+            </Card>
+          ) : results.length === 0 ? (
             <Card pad={48} style={{ textAlign: "center" }}>
               <div style={{ width: 56, height: 56, borderRadius: 16, background: T.paper, color: T.ink3, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>{I.search({ width: 26, height: 26 })}</div>
               <div style={{ fontFamily: T.serif, fontSize: 24, color: T.ink }}>No homes match those filters</div>
