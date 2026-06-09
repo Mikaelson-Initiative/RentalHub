@@ -153,6 +153,9 @@ export function mapBooking(b: ApiBooking): UiBooking {
 }
 
 export const getBookings = () => apiGet<ApiBooking[]>("/api/bookings");
+export const getBooking = (id: string) => apiGet<ApiBooking>(`/api/bookings/${id}`);
+export const initiatePayment = (bookingId: string) => apiPost<{ authorizationUrl: string; reference: string }>("/api/payments/initiate", { bookingId });
+export const verifyPayment = (reference: string, bookingId: string) => apiGet(`/api/payments/verify?reference=${encodeURIComponent(reference)}&bookingId=${encodeURIComponent(bookingId)}`);
 export const signAgreement = (bookingId: string, signedName: string) => apiPost("/api/bookings/sign-agreement", { bookingId, signedName });
 export const confirmMoveIn = (bookingId: string) => apiPost("/api/bookings/moved-in", { bookingId });
 
