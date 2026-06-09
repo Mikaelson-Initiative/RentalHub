@@ -6,7 +6,7 @@ import { PROPERTY_TYPES, DISTANCES, AMENITY_GROUPS, AREAS } from "@/lib/rh/data"
 import { useApp, useViewport } from "@/components/rh/app";
 import { Button, Card, Avatar, StatusBadge, Pill, Field, Input, Select, Textarea } from "@/components/rh/ui";
 import { DashShell, Stat, EmptyState } from "@/components/rh/dash-shell";
-import { getMyListings, getLandlordRequests, getEarnings, setBookingStatus, mapProperty, mapRequest, type UiListing, type UiRequest, type EarningsData } from "@/lib/rh/api";
+import { getMyListings, getLandlordRequests, getEarnings, setBookingStatus, mapProperty, mapRequest, uploadFile, createProperty, type UiListing, type UiRequest, type EarningsData } from "@/lib/rh/api";
 
 function initialsOf(name: string) {
   return (name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()) || "?";
@@ -73,7 +73,7 @@ function VerificationFlow({ status, setStatus }: { status: string; setStatus: (s
 
 interface WizData { title: string; type: string; units: number | string; gender: string; desc: string; area: string; dist: string; amenities: string[]; price: string; agency: string; caution: string; landmark: string }
 
-function AddPropertyWizard({ onClose }: { onClose: () => void }) {
+function AddPropertyWizard({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { showToast } = useApp();
   const { mobile } = useViewport();
   const [step, setStep] = useState(0);
@@ -81,6 +81,36 @@ function AddPropertyWizard({ onClose }: { onClose: () => void }) {
   const set = (k: keyof WizData, v: string | number) => setData((d) => ({ ...d, [k]: v }));
   const toggleAmen = (a: string) => setData((d) => ({ ...d, amenities: d.amenities.includes(a) ? d.amenities.filter((x) => x !== a) : [...d.amenities, a] }));
   const steps = ["Basics", "Location & amenities", "Pricing & photos"];
+  const [files, setFiles] = useState<File[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const distToKm = (d: string): number | undefined => ({ "Under 500m": 0.4, "500m – 1km": 0.8, "1 – 2km": 1.5, "2 – 5km": 3.5, "Over 5km": 6 } as Record<string, number>)[d];
+
+  const submit = async () => {
+    setError(null);
+    if (!data.title.trim() || !data.type || !data.area || !data.price) { setError("Add a title, type, area and rent before submitting."); return; }
+    setBusy(true);
+    try {
+      const images = files.length ? await Promise.all(files.map((f) => uploadFile(f))) : [];
+      await createProperty({
+        title: data.title.trim(),
+        description: data.desc.trim() || data.title.trim(),
+        price: Number(data.price),
+        locationName: data.area,
+        distanceToCampus: distToKm(data.dist),
+        amenities: data.amenities,
+        images,
+        vacantUnits: Number(data.units) || 1,
+      });
+      showToast("Listing submitted for review");
+      onCreated();
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't submit listing");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const genDesc = () => {
     const t = data.type || "home";
@@ -156,6 +186,23 @@ function AddPropertyWizard({ onClose }: { onClose: () => void }) {
                 <Field label="Agency fee (₦)" hint="Optional"><Input type="number" value={data.agency} onChange={(e) => set("agency", e.target.value)} placeholder="0" /></Field>
                 <Field label="Caution fee (₦)" hint="Optional"><Input type="number" value={data.caution} onChange={(e) => set("caution", e.target.value)} placeholder="0" /></Field>
               </div>
+              <div>
+                <div style={{ fontFamily: T.sans, fontSize: 12.5, fontWeight: 600, color: T.ink2, marginBottom: 8 }}>Photos</div>
+                <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, padding: "22px", borderRadius: 12, border: "1.5px dashed " + T.line, cursor: "pointer", color: T.ink2, background: "#fff" }}>
+                  {I.upload({ width: 22, height: 22 })}
+                  <span style={{ fontFamily: T.sans, fontSize: 13 }}>{files.length ? `${files.length} photo${files.length === 1 ? "" : "s"} selected` : "Tap to add photos"}</span>
+                  <input type="file" accept="image/*" multiple onChange={(e) => setFiles(Array.from(e.target.files || []))} style={{ display: "none" }} />
+                </label>
+                {files.length > 0 && (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginTop: 10 }}>
+                    {files.slice(0, 8).map((f, i) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img key={i} src={URL.createObjectURL(f)} alt="" style={{ aspectRatio: "1", width: "100%", objectFit: "cover", borderRadius: 12 }} />
+                    ))}
+                  </div>
+                )}
+              </div>
+              {error && <div style={{ fontFamily: T.sans, fontSize: 13, color: T.red, background: T.redSoft, borderRadius: 10, padding: "10px 14px" }}>{error}</div>}
               <Card pad={14} style={{ background: T.greenSoft, border: "none", display: "flex", alignItems: "flex-start", gap: 11 }}>
                 {I.shield({ width: 18, height: 18, style: { color: T.green, flex: "0 0 auto", marginTop: 1 } })}
                 <span style={{ fontFamily: T.sans, fontSize: 12.5, color: T.green, lineHeight: 1.5 }}>Your listing goes to our admin team for review (usually within 24 hours) before appearing in search.</span>
@@ -168,7 +215,7 @@ function AddPropertyWizard({ onClose }: { onClose: () => void }) {
           <Button variant="outline" onClick={() => (step === 0 ? onClose() : setStep(step - 1))}>{step === 0 ? "Cancel" : "Back"}</Button>
           {step < 2
             ? <Button onClick={() => setStep(step + 1)} iconRight={I.arrow}>Continue</Button>
-            : <Button variant="dark" icon={I.check} onClick={() => { onClose(); showToast("Listing form submitted (saving to backend coming soon)"); }}>Submit listing</Button>}
+            : <Button variant="dark" icon={I.check} disabled={busy} onClick={submit}>{busy ? "Submitting…" : "Submit listing"}</Button>}
         </div>
       </div>
     </div>
@@ -326,7 +373,7 @@ export function LandlordDash({ initial, openAdd }: { initial?: string; openAdd?:
         </Card>
       )}
 
-      {adding && <AddPropertyWizard onClose={() => setAdding(false)} />}
+      {adding && <AddPropertyWizard onClose={() => setAdding(false)} onCreated={() => { getMyListings().then((r) => setListings(r.items.map(mapProperty))).catch(() => {}); }} />}
     </DashShell>
   );
 }

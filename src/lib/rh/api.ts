@@ -173,6 +173,30 @@ export interface EarningsData {
   totalEarnings: number; monthlyEarnings: number; totalPaidBookings: number;
   bookings: Array<{ id: string; propertyTitle: string; studentName: string; amount: number; paidAt: string | null; moveInDate: string | null; paystackRef: string | null }>;
 }
+export interface UploadedImage { name: string; type: string; mimeType: string; size: number; url: string }
+export async function uploadFile(file: File): Promise<UploadedImage> {
+  const token = authToken();
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("category", "image");
+  const res = await fetch(`${API_BASE}/api/uploads`, {
+    method: "POST",
+    credentials: "include",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: fd,
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok || json?.success === false) throw new Error(json?.error || `Upload failed (${res.status})`);
+  return json.data as UploadedImage;
+}
+
+export interface PropertyInput {
+  title: string; description: string; price: number; locationName?: string; locationId?: string;
+  distanceToCampus?: number; amenities: string[]; images: UploadedImage[]; vacantUnits?: number;
+}
+export const createProperty = (body: PropertyInput) => apiPost<ApiProperty>("/api/properties", body);
+export const updateProperty = (id: string, body: Partial<PropertyInput>) => apiPut<ApiProperty>(`/api/properties/${id}`, body);
+
 export const getMyListings = () => apiGet<ApiListResponse>("/api/properties?mine=true&pageSize=50");
 export const getLandlordRequests = () => apiGet<(ApiBooking & { student?: { name?: string } })[]>("/api/bookings");
 export const setBookingStatus = (id: string, status: "CONFIRMED" | "CANCELLED") => apiPatch(`/api/bookings/${id}`, { status });
