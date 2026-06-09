@@ -39,6 +39,7 @@ export const apiGet = <T>(path: string) => request<T>(path);
 export const apiPost = <T>(path: string, body?: unknown) => request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined });
 export const apiPut = <T>(path: string, body?: unknown) => request<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined });
 export const apiPatch = <T>(path: string, body?: unknown) => request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined });
+export const apiDelete = <T>(path: string) => request<T>(path, { method: "DELETE" });
 
 // ── Auth (cross-origin-safe: plain JSON POSTs, no session cookie needed) ──
 export const registerUser = (body: { name: string; email: string; password: string; role: string }) =>
@@ -196,6 +197,9 @@ export interface PropertyInput {
 }
 export const createProperty = (body: PropertyInput) => apiPost<ApiProperty>("/api/properties", body);
 export const updateProperty = (id: string, body: Partial<PropertyInput>) => apiPut<ApiProperty>(`/api/properties/${id}`, body);
+export const getProperty = (id: string) => apiGet<ApiProperty>(`/api/properties/${id}`);
+export const getLocations = () => apiGet<Array<{ id: string; name: string }>>("/api/locations");
+export const deleteProperty = (id: string) => apiDelete(`/api/properties/${id}`);
 
 export const getMyListings = () => apiGet<ApiListResponse>("/api/properties?mine=true&pageSize=50");
 export const getLandlordRequests = () => apiGet<(ApiBooking & { student?: { name?: string } })[]>("/api/bookings");
